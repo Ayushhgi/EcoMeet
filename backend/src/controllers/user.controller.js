@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
-import { User,FriendRequest } from "../models/user.model.js";
+import { User } from "../models/user.model.js";
+import {FriendRequest} from "../models/FriendRequest.js"
 
 export async function getRecommendedUsers(req, res) {
   try {

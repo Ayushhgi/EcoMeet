@@ -38,8 +38,6 @@ async function login(req,res){
 };
 
 async function register(req, res) {
-
-   
    try {
       const { fullName, email, password } = req.body;
 
