@@ -1,6 +1,8 @@
 import express from 'express';
 import { createServer } from 'node:http'; 
 // import { Server } from 'socket.io';
+import "dotenv/config";
+import dotenv from "dotenv";
 import mongoose from 'mongoose';
 import cors from 'cors';
 import { connectToSocket } from './controllers/socketManager.js';
@@ -11,8 +13,9 @@ const app = express();
 const server = createServer(app); 
 const io = connectToSocket(server);
 
-const dbUrl =
-  'mongodb+srv://goyalayush2424:6nxrnG3eY86EVomT@cluster0.6s3bm.mongodb.net/';
+dotenv.config({ path: "./.env" });
+
+const dbUrl =process.env.MONGODB_URL;
 
 app.get('/home', (req, res) => {
   return res.json({ hello: 'world' });
