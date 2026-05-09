@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import {User} from "../models/user.model.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
@@ -24,8 +24,11 @@ export const protectRoute = async (req, res, next) => {
     req.user = user; //👉 You are attaching the logged-in user's data to the req object so that the next middleware or controller can access it.
 
     next();
+
   } catch (error) {
+
     console.log("Error in protectRoute middleware", error);
     res.status(500).json({ message: "Internal Server Error" });
+    
   }
 };

@@ -1,7 +1,6 @@
 import { User } from '../models/user.model.js';
 import httpstatus from 'http-status';
 import jwt from "jsonwebtoken";
-import crypto from 'crypto';
 import { Meeting } from "../models/meeting.model.js";
 
 async function login(req,res){
@@ -38,12 +37,11 @@ async function login(req,res){
   }
 };
 
-
 async function register(req, res) {
 
-   const { fullName, email, password } = req.body;
-
+   
    try {
+      const { fullName, email, password } = req.body;
 
       if (!fullName || !email || !password) {
          return res.status(httpstatus.BAD_REQUEST).json({
@@ -118,11 +116,13 @@ async function register(req, res) {
          message: "Internal Server Error"
       });
    }
-}
+};
+
 async function logout(req, res) {
+
   res.clearCookie("jwt");
   res.status(200).json({ success: true, message: "Logout successful" });
-}
+};
 
 const getUserHistory = async (req, res) => {
     const { token } = req.query;
@@ -134,7 +134,7 @@ const getUserHistory = async (req, res) => {
     } catch (e) {
         res.json({ message: `Something went wrong ${e}` })
     }
-}
+};
 
 const addToHistory = async (req, res) => {
     const { token, meeting_code } = req.body;
@@ -152,8 +152,46 @@ const addToHistory = async (req, res) => {
     } catch (e) {
         res.json({ message: `Something went wrong ${e}` })
     }
+};
+
+
+async function onboard(req, res) {
+  try {
+    const userId = req.user._id;
+
+    const { fullName, bio, nativeLanguage, learningLanguage, location } = req.body;
+
+    if (!fullName || !bio || !nativeLanguage || !learningLanguage || !location) {
+      return res.status(400).json({
+        message: "All fields are required",
+        missingFields: [
+          !fullName && "fullName",
+          !bio && "bio",
+          !nativeLanguage && "nativeLanguage",
+          !learningLanguage && "learningLanguage",
+          !location && "location",
+        ].filter(Boolean),
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        ...req.body,
+        isOnboarded: true,
+      },
+      { new: true } //this return a req object
+    );
+
+    if (!updatedUser) return res.status(404).json({ message: "User not found" });
+
+    res.status(200).json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error("Onboarding error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 }
 
 
 
-export { register, login,logout,getUserHistory, addToHistory };
+export { register, onboard, login,logout,getUserHistory, addToHistory };

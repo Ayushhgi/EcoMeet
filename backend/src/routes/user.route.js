@@ -1,13 +1,29 @@
-import express from "express";
-import { addToHistory, getUserHistory, login, register } from "../controllers/auth.controller.js";
-import { protectRoute } from "../middleware/auth.middleware.js";
+import express from 'express'
+import { protectRoute } from '../middleware/auth.middleware.js'
+import {
+  acceptFriendRequest,
+  getFriendRequests,
+  getMyFriends,
+  getOutgoingFriendReqs,
+  getRecommendedUsers,
+  sendFriendRequest
+} from '../controllers/user.controller.js'
 
-const router = express.Router();
+const router = express.Router()
 
-router.route("/login").post(login);
-router.route("/register").post(register);
-router.route("/onboading").post(protectRoute,onboad);
-router.route("/add_to_activity").post(addToHistory)
-router.route("/get_all_activity").get(getUserHistory)
+// apply middleware to all routes
+router.use(protectRoute)
 
-export default router;
+router.route('/').get(getRecommendedUsers)
+router.route('/friends').get(getMyFriends)
+
+router.post('/friend-request/:id', sendFriendRequest)
+router.put('/friend-request/:id/accept', acceptFriendRequest)
+
+router.get('/friend-requests', getFriendRequests)
+router.get('/outgoing-friend-requests', getOutgoingFriendReqs)
+
+router.get("/friend-requests", getFriendRequests);
+router.get("/outgoing-friend-requests", getOutgoingFriendReqs);
+
+export default router
