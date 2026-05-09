@@ -85,7 +85,7 @@ async function register(req, res) {
          profilePic: randomAvatar
       });
 
-      const token = jwt.sign(
+      const token = jwt.sign(  // we have provided it three parameters - paylode , secret key , expireIn
          { userId: newUser._id },
          process.env.JWT_SECRET_KEY,
          {
