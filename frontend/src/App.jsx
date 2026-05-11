@@ -8,12 +8,13 @@ import './index.css'
 import Home from './Pages/Home.jsx'
 import Login from './Pages/Login.jsx'
 import Signup from './Pages/Signup.jsx'
-import Notification from './Pages/Notification.jsx'
 import toast, { Toaster } from 'react-hot-toast'
 import useAuthUser from "./hooks/useAuthUser.js";
 import PageLoader from './components/PageLoader.jsx'
 import OnboardingPage from './Pages/OnboardingPage.jsx'
 import Navbar from './components/Navbar.jsx'
+import NotificationsPage from './Pages/NotificationPage.jsx'
+import MyFriends from './Pages/MyFriends.jsx'
 
 function App () {
 
@@ -65,7 +66,30 @@ function App () {
             )
           }
         />
-        <Route path='/notification' element={<Notification />} />
+        <Route
+          path="/notification"
+          element={
+            isAuthenticated && isOnboarded ? (
+              <Navbar showSidebar={true}>
+                <NotificationsPage />
+              </Navbar>
+            ) : (
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
+            )
+          }
+        />
+        <Route
+          path="/myfriends"
+          element={
+            isAuthenticated && isOnboarded ? (
+              <Navbar showSidebar={true}>
+                <MyFriends />
+              </Navbar>
+            ) : (
+              <Navigate to={!isAuthenticated ? "/login" : "/onboarding"} />
+            )
+          }
+        />
       </Routes>
       <Toaster></Toaster>
     </div>

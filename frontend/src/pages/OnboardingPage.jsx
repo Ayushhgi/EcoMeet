@@ -43,10 +43,19 @@ const OnboardingPage = () => {
 
     onboardingMutation(formState)
   }
+  function randomString(length) {
+  const chars = "abcdefghijklmnopqrstuvwxyz";
+  let result = "";
 
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  return result;
+}
   const handleRandomAvatar = () => {
-    const idx = Math.floor(Math.random() * 100) + 1 // 1-100 included
-    const randomAvatar = `https://randomuser.me/api/portraits/thumb/men/${idx}.jpg`
+    const idx = Math.floor(Math.random() * 100) + 1;
+    const randomAvatar = `https://i.pravatar.cc/150?img=${idx}`;
 
     setFormState({ ...formState, profilePic: randomAvatar })
     toast.success('Random profile picture generated!')

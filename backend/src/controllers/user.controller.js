@@ -8,6 +8,7 @@ export async function getRecommendedUsers(req, res) {
     const currentUser = req.user;
 
     const recommendedUsers = await User.find({
+
       $and: [
         { _id: { $ne: currentUserId } }, //exclude current user
         { _id: { $nin: currentUser.friends } }, // exclude current user's friends
@@ -78,6 +79,7 @@ export async function sendFriendRequest(req, res) {
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
+
 
 export async function acceptFriendRequest(req, res) {
   try {

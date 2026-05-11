@@ -4,6 +4,8 @@ import ThemeSelector from './ThemeSelector'
 import { useThemeStore } from '../store/useThemeStore'
 import { Link } from 'react-router-dom'
 import { ShipWheelIcon } from 'lucide-react'
+import { useNavigate } from "react-router";
+import useAuthUser from '../hooks/useAuthUser'
 
 const Navbar = ({ showSidebarAndNavbar = true, children }) => {
   const { theme } = useThemeStore()
@@ -13,6 +15,10 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
   //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ["authUser"] }),
   // });
   const { logoutMutation } = useLogout()
+  const navigate = useNavigate();
+  const { isLoading, authUser } = useAuthUser();
+  console.log(authUser)
+  
 
   return (
     <div data-theme={theme} className='drawer lg:drawer-open'>
@@ -52,9 +58,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                   className='
                   size-7 
                   text-primary 
-                  animate-spin 
-                  [animation-duration:4s]
-                  hover:[animation-direction:reverse]
+                  
                 '
                 />
                 <span className='text-2xl  font-mono bg-clip-text text-transparent bg-linear-to-r from-primary to-secondary  tracking-wider'>
@@ -71,7 +75,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
 
               {/* Notification */}
 
-              <button className='btn btn-ghost btn-circle'>
+              <Link to='/notification' className='btn btn-ghost btn-circle'>
                 <div className='indicator'>
                   <svg
                     xmlns='http://www.w3.org/2000/svg'
@@ -90,7 +94,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
 
                   <span className='badge badge-primary indicator-item w-2 h-2 p-0'></span>
                 </div>
-              </button>
+              </Link>
 
               {/* Profile Dropdown */}
               <div className='dropdown dropdown-end'>
@@ -102,7 +106,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                   <div className='w-10 rounded-full'>
                     <img
                       alt='profile'
-                      src='https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.webp'
+                      src={authUser?.profilePic}
                     />
                   </div>
                 </div>
@@ -173,6 +177,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
               <button
                 className='is-drawer-close:tooltip is-drawer-close:tooltip-right'
                 data-tip='Homepage'
+                onClick={() => navigate("/")}
               >
                 <svg
                   xmlns='http://www.w3.org/2000/svg'
@@ -197,6 +202,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
               <button
                 className='is-drawer-close:tooltip is-drawer-close:tooltip-right'
                 data-tip='Friends'
+                onClick={()=>{navigate('/myfriends')}}
               >
                 <svg
                   xmlns='http://www.w3.org/2000/svg'
@@ -220,6 +226,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
               <button
                 className='is-drawer-close:tooltip is-drawer-close:tooltip-right'
                 data-tip='Notification'
+                 onClick={() => navigate("/notification")}
               >
                 <svg
                   xmlns='http://www.w3.org/2000/svg'

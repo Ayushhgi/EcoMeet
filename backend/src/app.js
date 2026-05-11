@@ -37,7 +37,7 @@ app.use(express.urlencoded({limit:"40kb",extended:true}));
 
 
 app.use('/api/auth', authRoutes)
-app.use('/api/user', userRoutes)
+app.use('/api/users', userRoutes)
 
 
 app.set("port", (process.env.PORT || 9002));
