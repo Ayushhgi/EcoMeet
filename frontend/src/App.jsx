@@ -16,6 +16,7 @@ import OnboardingPage from './Pages/OnboardingPage.jsx'
 import Navbar from './components/Navbar.jsx'
 
 function App () {
+
   const { isLoading, authUser } = useAuthUser();
 
   if(isLoading)return (<>
@@ -29,7 +30,7 @@ function App () {
 
 
   return (
-    <>
+    <div data-theme={'forest'}>
       <Routes>
         <Route path='/' element={isAuthenticated && isOnboarded ? (
               <Navbar showSidebarAndNavbar='true'>
@@ -67,7 +68,7 @@ function App () {
         <Route path='/notification' element={<Notification />} />
       </Routes>
       <Toaster></Toaster>
-    </>
+    </div>
   )
 }
 

@@ -1,18 +1,21 @@
 import useLogout from '../hooks/useLogout'
+import { useState } from 'react'
+import ThemeSelector from './ThemeSelector'
+import { useThemeStore } from '../store/useThemeStore'
+import { Link } from 'react-router-dom'
+import { ShipWheelIcon } from 'lucide-react'
 
 const Navbar = ({ showSidebarAndNavbar = true, children }) => {
-
+  const { theme } = useThemeStore()
   // const queryClient = useQueryClient();
   // const { mutate: logoutMutation } = useMutation({
   //   mutationFn: logout,
   //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ["authUser"] }),
   // });
-
-  const {logoutMutation}=useLogout();
-
+  const { logoutMutation } = useLogout()
 
   return (
-    <div data-theme='night' className='drawer lg:drawer-open'>
+    <div data-theme={theme} className='drawer lg:drawer-open'>
       <input id='my-drawer-4' type='checkbox' className='drawer-toggle' />
 
       <div className='drawer-content'>
@@ -43,11 +46,31 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
           {/* Navbar Content */}
           <div className='flex w-full items-center justify-between px-4'>
             {/* Title */}
-            <h1 className='text-lg font-semibold'>EcoMeet</h1>
+            <div className='pl-5'>
+              <Link to='/' className='flex items-center gap-2.5'>
+                <ShipWheelIcon
+                  className='
+                  size-7 
+                  text-primary 
+                  animate-spin 
+                  [animation-duration:4s]
+                  hover:[animation-direction:reverse]
+                '
+                />
+                <span className='text-2xl  font-mono bg-clip-text text-transparent bg-linear-to-r from-primary to-secondary  tracking-wider'>
+                  EcoMeet
+                </span>
+              </Link>
+            </div>
 
             {/* Right Section */}
             <div className='flex items-center gap-2'>
+              {/* Color plate */}
+
+              <ThemeSelector />
+
               {/* Notification */}
+
               <button className='btn btn-ghost btn-circle'>
                 <div className='indicator'>
                   <svg
@@ -100,12 +123,16 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                   </li>
 
                   <li>
-                    <a onClick={logoutMutation} >Logout</a>
+                    <a onClick={logoutMutation}>Logout</a>
                   </li>
                 </ul>
               </div>
-              <button onClick={logoutMutation} className='btn btn-ghost btn-circle'>  {/* while cllicking on logoutMutation we run this funcion which is in hook/useLogout which runs a fucntion of logout in it which calls an api threw axios and return response and error , if user logout authUser return null,authUser return null because onSuccess of LogOut we run a useQuery{['authUser']} in which we send a get request on /me but before it we run the middleware which try to take token form the cookie but it wont get and send the error . The error is handled in getAuthUser function of useQuery writen in lib/aci.js/authUser returns null  and update isAuthenticate valiable to false in app.jsx and we redirect accoringly */}
-          
+              <button
+                onClick={logoutMutation}
+                className='btn btn-ghost btn-circle'
+              >
+                {' '}
+                {/* while cllicking on logoutMutation we run this funcion which is in hook/useLogout which runs a fucntion of logout in it which calls an api threw axios and return response and error , if user logout authUser return null,authUser return null because onSuccess of LogOut we run a useQuery{['authUser']} in which we send a get request on /me but before it we run the middleware which try to take token form the cookie but it wont get and send the error . The error is handled in getAuthUser function of useQuery writen in lib/aci.js/authUser returns null  and update isAuthenticate valiable to false in app.jsx and we redirect accoringly */}
                 <div className='indicator'>
                   <svg
                     className='h-5 w-5'
@@ -118,7 +145,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                       stroke-linecap='round'
                       stroke-linejoin='round'
                       stroke-width='2'
-                      d="M20 12h-9.5m7.5 3l3-3-3-3m-5-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h5a2 2 0 002-2v-1"
+                      d='M20 12h-9.5m7.5 3l3-3-3-3m-5-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h5a2 2 0 002-2v-1'
                     />
                   </svg>
                 </div>

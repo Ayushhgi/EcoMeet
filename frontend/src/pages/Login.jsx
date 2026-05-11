@@ -66,7 +66,6 @@ const LoginPage = () => {
                     <label className="label">
                       <span className="label-text">Email</span>
                     </label>
-                    {loginData.email}
                     <input
                       type="email"
                       placeholder="hello@example.com"
@@ -81,7 +80,6 @@ const LoginPage = () => {
                     <label className="label">
                       <span className="label-text">Password</span>
                     </label>
-                    {loginData.password}
                     <input
                       type="password"
                       placeholder="••••••••"
