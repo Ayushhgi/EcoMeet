@@ -17,11 +17,12 @@ const router = express.Router()
 router.route('/register').post(register)
 router.route('/login').post(login)
 router.route('/logout').post(logout)
-router.route('/onboading').post(protectRoute, onboard)
+router.route('/onboarding').post(protectRoute, onboard)
 router.route('/add_to_activity').post(addToHistory)
 router.route('/get_all_activity').get(getUserHistory)
-router.route('/me').get(protectRoute, (req, res) => {
-  return res.json({ user: req.user })
-})
+router.get("/me", protectRoute, (req, res) => {
+  res.status(200).json({ success: true, user: req.user });
+});
+
 
 export default router

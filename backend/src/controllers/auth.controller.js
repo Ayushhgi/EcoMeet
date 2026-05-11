@@ -8,7 +8,7 @@ async function login(req,res){
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
+      return res.status(400).json({ message: "All fields are required backend" });
     }
 
     const user = await User.findOne({ email });
@@ -26,8 +26,8 @@ async function login(req,res){
     res.cookie("jwt", token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       httpOnly: true, // prevent XSS attacks,
-      sameSite: "strict", // prevent CSRF attacks
-      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax", // prevent CSRF attacks
+      secure: "false",
     });
 
     res.status(200).json({ success: true, user });
@@ -92,8 +92,8 @@ async function register(req, res) {
       res.cookie("jwt", token, {
          maxAge: 7 * 24 * 60 * 60 * 1000,
          httpOnly: true,
-         sameSite: "strict",
-         secure: process.env.NODE_ENV === "production"
+         sameSite: "lax",
+         secure: "false",
       });
 
       return res.status(httpstatus.CREATED).json({
