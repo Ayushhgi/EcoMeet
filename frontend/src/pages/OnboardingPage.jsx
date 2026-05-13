@@ -7,13 +7,32 @@ import {
   LoaderIcon,
   MapPinIcon,
   ShipWheelIcon,
-  ShuffleIcon
+  ShuffleIcon,
+  CameraIcon
 } from 'lucide-react'
 import { LANGUAGES } from '../constants'
 
 const OnboardingPage = () => {
+
   const { authUser } = useAuthUser()
   const queryClient = useQueryClient()
+
+
+   const images = [
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778589053/androgynous-avatar-non-binary-queer-person_4_ieb3fy.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778589042/androgynous-avatar-non-binary-queer-person_je68il.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778589032/portrait-man-cartoon-style_tlp0c0.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588976/9_ozp8x1.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588974/8_gfp2u2.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588974/8_gfp2u2.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588957/5_bke1qr.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588957/6_rlt1w4.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588956/4_bskymk.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588955/3_avyi7k.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588939/1_cbn84t.jpg",
+    "https://res.cloudinary.com/dpgajzstl/image/upload/v1778588938/0_cza4nx.jpg",
+  ];
+  
 
   const [formState, setFormState] = useState({
     fullName: authUser?.fullName || '',
@@ -43,21 +62,14 @@ const OnboardingPage = () => {
 
     onboardingMutation(formState)
   }
-  function randomString(length) {
-  const chars = "abcdefghijklmnopqrstuvwxyz";
-  let result = "";
-
-  for (let i = 0; i < length; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
-  }
-
-  return result;
-}
   const handleRandomAvatar = () => {
-    const idx = Math.floor(Math.random() * 100) + 1;
-    const randomAvatar = `https://i.pravatar.cc/150?img=${idx}`;
+    const randomIndex = Math.floor(Math.random() * images.length);
+    const randomUrl = images[randomIndex];
 
-    setFormState({ ...formState, profilePic: randomAvatar })
+
+    // setSelectedImage(randomUrl);
+
+    setFormState({ ...formState, profilePic: randomUrl })
     toast.success('Random profile picture generated!')
   }
 

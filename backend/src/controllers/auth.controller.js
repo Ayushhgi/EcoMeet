@@ -71,14 +71,13 @@ async function register(req, res) {
 
       const idx = Math.floor(Math.random() * 100) + 1;
 
-      const randomAvatar =
-         `https://randomuser.me/api/portraits/thumb/men/${idx}.jpg`;
+      // const randomAvatar =
+      //    `https://randomuser.me/api/portraits/thumb/men/${idx}.jpg`;
 
       const newUser = await User.create({
          fullName,
          email,
          password,
-         profilePic: randomAvatar
       });
 
       const token = jwt.sign(  // we have provided it three parameters - paylode , secret key , expireIn

@@ -26,4 +26,6 @@ router.get('/outgoing-friend-requests', getOutgoingFriendReqs)
 router.get("/friend-requests", getFriendRequests);
 router.get("/outgoing-friend-requests", getOutgoingFriendReqs);
 
+// router.post("/join-conversation",joinConversation);
+
 export default router

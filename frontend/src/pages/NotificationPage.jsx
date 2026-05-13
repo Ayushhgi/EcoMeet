@@ -11,6 +11,8 @@ const NotificationsPage = () => {
     queryFn: getFriendRequests,
   });
 
+
+  
   const { mutate: acceptRequestMutation, isPending } = useMutation({
     mutationFn: acceptFriendRequest,
     onSuccess: () => {

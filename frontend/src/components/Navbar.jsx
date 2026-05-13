@@ -4,7 +4,7 @@ import ThemeSelector from './ThemeSelector'
 import { useThemeStore } from '../store/useThemeStore'
 import { Link } from 'react-router-dom'
 import { ShipWheelIcon } from 'lucide-react'
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import useAuthUser from '../hooks/useAuthUser'
 
 const Navbar = ({ showSidebarAndNavbar = true, children }) => {
@@ -17,7 +17,6 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
   const { logoutMutation } = useLogout()
   const navigate = useNavigate();
   const { isLoading, authUser } = useAuthUser();
-  console.log(authUser)
   
 
   return (

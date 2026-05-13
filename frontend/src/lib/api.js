@@ -7,6 +7,7 @@ export const signUp = async signupData => {
 export const getAuthUser = async () => {
   try {
     const res = await axiosInstance.get('/auth/me')
+    // console.log(res.data)
     return res.data
   } catch (error) {
     console.log('Error in getAuthUser:', error)
@@ -42,7 +43,7 @@ export async function getOutgoingFriendReqs() {
   return response.data;
 }
 
-export async function sendFriendRequest(userId) {
+export async function sendFriendRequest(userId) { 
   const response = await axiosInstance.post(`/users/friend-request/${userId}`);
   return response.data;
 }
@@ -59,5 +60,16 @@ export async function acceptFriendRequest(requestId) {
 
 export async function getStreamToken() {
   const response = await axiosInstance.get("/chat/token");
+  return response.data;
+}
+export async function getConversationalId(id2){
+  const response=await axiosInstance.get(`/conversation-room/${id2}`);
+  return response.data;
+}
+
+export async function getConversation(id) {
+  const response = await axiosInstance.get(
+    `conversation-room/conversation/${id}`
+  );
   return response.data;
 }
