@@ -43,12 +43,11 @@ app.use('/api/users', userRoutes)
 app.use('/api/conversation-room',conversationRoutes);
 app.use("/api/message", messageRoutes);
 
-app.use(express.static(path.join(path.resolve(), "frontend", "dist")));
+app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(path.resolve(), "frontend", "dist", "index.html"));
+  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
 });
-
 
 app.set("port", (process.env.PORT || 9002));
 const start = async () => {
