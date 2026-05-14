@@ -21,7 +21,11 @@ const ChatPage = () => {
   const { authUser } = useAuthUser()
 
   // ================= CONVERSATION =================
-  const { data: conversation, isPending, isError } = useQuery({
+  const {
+    data: conversation,
+    isPending,
+    isError
+  } = useQuery({
     queryKey: ['conversation', id],
     queryFn: () => getConversation(id),
     enabled: !!id
@@ -38,20 +42,21 @@ const ChatPage = () => {
   })
 
   // ================= SEND MESSAGE =================
-  const { mutate: sendMessageMutation, isPending: sendingMessage } = useMutation({
-    mutationFn: sendMessage,
-    onSuccess: () => {
-      setMessage('')
-    }
-  })
+  const { mutate: sendMessageMutation, isPending: sendingMessage } =
+    useMutation({
+      mutationFn: sendMessage,
+      onSuccess: () => {
+        setMessage('')
+      }
+    })
 
   // ================= SOCKET + ROOM JOIN =================
   useEffect(() => {
     if (!conversation?._id) return
 
     if (!socketRef.current) {
-      socketRef.current = io("https://backendecomeet.onrender.com", {
-        withCredentials: true,
+      socketRef.current = io('https://backendecomeet.onrender.com', {
+        withCredentials: true
       })
     }
 
@@ -66,22 +71,38 @@ const ChatPage = () => {
     // 👇 2. Check room joined
     console.log('🚪 Joining room:', conversation._id)
 
-    const handleReceiveMessage = ({ senderId, text, createdAt }) => {
-      // 👇 3. Check if receiver gets the message
-      console.log('📩 Received message:', { senderId, text, createdAt })
+    // const handleReceiveMessage = ({ senderId, text, createdAt }) => {
+    //   // 👇 3. Check if receiver gets the message
+    //   console.log('📩 Received message:', { senderId, text, createdAt })
+    //   setLiveMessages(prev => [
+    //     ...prev,
+    //     {
+    //       _id: `live-${Date.now()}`,
+    //       senderId,
+    //       text,
+    //       createdAt,
+    //       isLive: true
+    //     }
+    //   ])
+    // }
+
+    socket.on('receive-message', data => {
+      // IGNORE OWN MESSAGE
+      if (data.senderId === authUser?._id) return
+
+      console.log('📩 Received message:', data)
+
       setLiveMessages(prev => [
         ...prev,
         {
           _id: `live-${Date.now()}`,
-          senderId,
-          text,
-          createdAt,
+          senderId: data.senderId,
+          text: data.text,
+          createdAt: data.createdAt,
           isLive: true
         }
       ])
-    }
-
-    socket.on('receive-message', handleReceiveMessage)
+    })
 
     return () => {
       socket.emit('leave-room', conversation._id)
@@ -132,7 +153,11 @@ const ChatPage = () => {
 
   // ================= LOADING =================
   if (isPending) {
-    return <div className='min-h-screen flex items-center justify-center'>Loading...</div>
+    return (
+      <div className='min-h-screen flex items-center justify-center'>
+        Loading...
+      </div>
+    )
   }
 
   if (isError || !conversation) return <Navigate to='/' />
@@ -144,27 +169,37 @@ const ChatPage = () => {
   const allMessages = [...dbMessages, ...liveMessages]
 
   return (
-    <div data-theme={theme} className='min-h-screen bg-base-200 flex items-center justify-center p-4'>
+    <div
+      data-theme={theme}
+      className='min-h-screen bg-base-200 flex items-center justify-center p-4'
+    >
       <div className='w-full max-w-6xl h-[95vh] bg-base-100 rounded-2xl shadow-2xl border border-base-300 flex flex-col overflow-hidden'>
-
         {/* ================= HEADER ================= */}
         <div className='navbar bg-base-100 border-b border-base-300 px-4'>
           <div className='flex-1 gap-3'>
             <div className='avatar online'>
               <div className='w-12 rounded-full'>
                 <img
-                  src={otherMember?.profilePic || 'https://randomuser.me/api/portraits/women/44.jpg'}
+                  src={
+                    otherMember?.profilePic ||
+                    'https://randomuser.me/api/portraits/women/44.jpg'
+                  }
                   alt='profile'
                 />
               </div>
             </div>
             <div>
-              <h2 className='font-bold text-lg'>{otherMember?.fullName || 'User'}</h2>
+              <h2 className='font-bold text-lg'>
+                {otherMember?.fullName || 'User'}
+              </h2>
               <p className='text-sm opacity-70'>Room ID: {conversation._id}</p>
             </div>
           </div>
           <div className='flex-none'>
-            <button onClick={handleVideoIcon} className='btn btn-success btn-circle'>
+            <button
+              onClick={handleVideoIcon}
+              className='btn btn-success btn-circle'
+            >
               <VideoIcon className='size-5 text-white' />
             </button>
           </div>
@@ -185,12 +220,19 @@ const ChatPage = () => {
                 msg.senderId?._id === authUser?._id
 
               return (
-                <div key={msg._id} className={`chat ${isSender ? 'chat-end' : 'chat-start'}`}>
+                <div
+                  key={msg._id}
+                  className={`chat ${isSender ? 'chat-end' : 'chat-start'}`}
+                >
                   <div className='chat-image avatar'>
                     <div className='w-10 rounded-full'>
                       <img
                         alt='user'
-                        src={isSender ? authUser?.profilePic : otherMember?.profilePic}
+                        src={
+                          isSender
+                            ? authUser?.profilePic
+                            : otherMember?.profilePic
+                        }
                       />
                     </div>
                   </div>
@@ -199,10 +241,18 @@ const ChatPage = () => {
                     {isSender ? 'You' : otherMember?.fullName}
                   </div>
 
-                  <div className={`chat-bubble ${isSender ? 'chat-bubble-primary' : ''}`}>
+                  <div
+                    className={`chat-bubble ${
+                      isSender ? 'chat-bubble-primary' : ''
+                    }`}
+                  >
                     {msg.text}
                     {msg.image && (
-                      <img src={msg.image} alt='message' className='mt-2 rounded-lg max-w-xs' />
+                      <img
+                        src={msg.image}
+                        alt='message'
+                        className='mt-2 rounded-lg max-w-xs'
+                      />
                     )}
                   </div>
 
@@ -229,7 +279,9 @@ const ChatPage = () => {
               placeholder='Type your message'
               value={message}
               onChange={e => setMessage(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSendMessage() }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSendMessage()
+              }}
               className='input input-bordered flex-1 rounded-full'
             />
 
@@ -242,7 +294,6 @@ const ChatPage = () => {
             </button>
           </div>
         </div>
-
       </div>
     </div>
   )

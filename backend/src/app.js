@@ -10,11 +10,13 @@ import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
 import messageRoutes from './routes/message.route.js'
+import path from 'path';
+
 
 
 const app = express();
 const server = createServer(app); 
-const io = connectToSocket(server);
+connectToSocket(server);
 
 dotenv.config({ path: "./.env" });
 
