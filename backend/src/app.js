@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import mongoose from 'mongoose';
 import cors from 'cors';
 import cookieParser from "cookie-parser";
-import { connectToSocket } from './controllers/socketManager.js';
+import { connectToSocket } from './controllers/socketChatManager.js';
 import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
