@@ -7,9 +7,8 @@ let messages = {}
 export const connectToSocket = server => {
   const io = new Server(server, {
     cors: {
-      origin: '*', // All client domain
+      origin: 'https://ecomeet-ed87.onrender.com', // All client domain
       methods: ['GET', 'POST'],
-      allowedHeaders: ['*'],
       credentials: true
     }
   })
