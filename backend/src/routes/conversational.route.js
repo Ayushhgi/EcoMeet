@@ -6,5 +6,8 @@ const router = express.Router()
 router.use(protectRoute) //this will apply this middleware to all the routes
 router.get('/:id2',getConversationalId)
 router.get('/conversation/:id',getConversation)
+// router.get("/:conversationId", getMessages);
+// router.post("message/send", sendMessage);
+
 
 export default router

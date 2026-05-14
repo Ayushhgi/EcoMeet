@@ -137,14 +137,6 @@ export async function acceptFriendRequest (req, res) {
   }
 }
 
-// export async joinConversation(req,res){
-//   try{
-
-//   }catch(error){
-//     res.status(500).json({ message: "Internal Server Error" });
-//   }
-// }
-
 export async function getFriendRequests (req, res) {
   try {
     const incomingReqs = await FriendRequest.find({

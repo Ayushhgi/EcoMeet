@@ -73,3 +73,24 @@ export async function getConversation(id) {
   );
   return response.data;
 }
+
+// ================= GET MESSAGES =================
+
+export async function getMessages(conversationId) {
+  const res = await axiosInstance.get(
+    `/message/${conversationId}`
+  );
+
+  return res.data;
+}
+
+// ================= SEND MESSAGE =================
+
+export async function sendMessage(data) {
+  const res = await axiosInstance.post(
+    "/message/send",
+    data
+  );
+
+  return res.data;
+}

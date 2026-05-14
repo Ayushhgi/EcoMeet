@@ -125,10 +125,10 @@ function App() {
           />
 
           <Route
-            path="/call/:id"
+            path="/call/:id/video"
             element={
               isAuthenticated && isOnboarded ? (
-                <VideoMeeting />
+                <VideoMeeting  />
               ) : (
                 <Navigate
                   to={!isAuthenticated ? "/login" : "/onboarding"}

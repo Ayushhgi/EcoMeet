@@ -9,6 +9,7 @@ import { connectToSocket } from './controllers/socketManager.js';
 import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
+import messageRoutes from './routes/message.route.js'
 
 
 const app = express();
@@ -40,6 +41,7 @@ app.use(express.urlencoded({limit:"40kb",extended:true}));
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/conversation-room',conversationRoutes);
+app.use("/api/message", messageRoutes);
 
 
 app.set("port", (process.env.PORT || 9002));

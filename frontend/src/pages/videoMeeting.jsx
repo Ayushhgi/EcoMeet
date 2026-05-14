@@ -10,9 +10,9 @@ import MicOffIcon from '@mui/icons-material/MicOff'
 import ScreenShareIcon from '@mui/icons-material/ScreenShare'
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare'
 import ChatIcon from '@mui/icons-material/Chat'
-// import server from '../../environment'
+import server from '../../environment.js'
 
-const server_url = `http://localhost:9002`
+const server_url = server
 
 var connections = {}
 
@@ -536,7 +536,7 @@ const VideoMeeting = () => {
           {/* Form Section */}
           <div className='space-y-6'>
             {/* Username Input */}
-            <div>
+            {/* <div>
               <label
                 htmlFor='username'
                 className='block text-sm font-medium text-gray-700 mb-2'
@@ -558,12 +558,12 @@ const VideoMeeting = () => {
                   Username is required to join the lobby
                 </p>
               )}
-            </div>
+            </div> */}
 
             {/* Connect Button */}
             <button
               onClick={connect}
-              disabled={!username.trim() || isConnecting}
+              disabled={isConnecting}
               className='w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center'
             >
               {isConnecting ? (
