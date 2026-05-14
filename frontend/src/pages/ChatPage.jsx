@@ -1,266 +1,210 @@
 import { ImageIcon, SendHorizonalIcon, VideoIcon } from 'lucide-react'
 import { useThemeStore } from '../store/useThemeStore'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { getConversation, getMessages, sendMessage } from '../lib/api'
 import useAuthUser from '../hooks/useAuthUser'
 import server from '../../environment'
-// ================= SERVER URL =================
-
-// ================= COMPONENT =================
 
 const ChatPage = () => {
   const { theme } = useThemeStore()
-
   const { id } = useParams()
-
   const navigate = useNavigate()
-
-  const queryClient = useQueryClient()
-
   const messagesEndRef = useRef(null)
-
-  // ================= SOCKET REF =================
-
   const socketRef = useRef(null)
 
   const [message, setMessage] = useState('')
+  const [liveMessages, setLiveMessages] = useState([])
 
   const { authUser } = useAuthUser()
 
-  // ================= SOCKET CONNECTION =================
-
-  useEffect(() => {
-    if (!socketRef.current) {
-      socketRef.current = io(server, {
-        withCredentials: true,
-        transports: ['websocket']
-      })
-    }
-
-    return () => {
-      socketRef.current?.disconnect()
-    }
-  }, [])
-
   // ================= CONVERSATION =================
-
-  const {
-    data: conversation,
-    isPending,
-    isError
-  } = useQuery({
+  const { data: conversation, isPending, isError } = useQuery({
     queryKey: ['conversation', id],
     queryFn: () => getConversation(id),
     enabled: !!id
   })
 
-  // ================= MESSAGES =================
-
-  const { data: messages = [], isLoading: messagesLoading } = useQuery({
+  // ================= MESSAGES (DB — only on mount/reload) =================
+  const { data: dbMessages = [], isLoading: messagesLoading } = useQuery({
     queryKey: ['messages', id],
     queryFn: () => getMessages(id),
-    enabled: !!id
+    enabled: !!id,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false
   })
 
   // ================= SEND MESSAGE =================
+  const { mutate: sendMessageMutation, isPending: sendingMessage } = useMutation({
+    mutationFn: sendMessage,
+    onSuccess: () => {
+      setMessage('')
+    }
+  })
 
-  const { mutate: sendMessageMutation, isPending: sendingMessage } =
-    useMutation({
-      mutationFn: sendMessage,
-
-      onSuccess: () => {
-        queryClient.invalidateQueries({
-          queryKey: ['messages', id]
-        })
-
-        setMessage('')
-      }
-    })
-
-  // ================= ROOM JOIN =================
-
+  // ================= SOCKET + ROOM JOIN =================
   useEffect(() => {
-    if (!conversation?._id || !socketRef.current) return
+    if (!conversation?._id) return
 
-    socketRef.current.emit('join-room', conversation._id)
-
-    const handleReceiveMessage = () => {
-      queryClient.invalidateQueries({
-        queryKey: ['messages', id]
+    if (!socketRef.current) {
+      socketRef.current = io("https://backendecomeet.onrender.com", {
+        withCredentials: true,
       })
     }
 
-    socketRef.current.on('receive-message', handleReceiveMessage)
+    const socket = socketRef.current
+
+    // 👇 1. Check socket connected
+    socket.on('connect', () => {
+      console.log('✅ Socket connected:', socket.id)
+    })
+
+    socket.emit('join-room', conversation._id)
+    // 👇 2. Check room joined
+    console.log('🚪 Joining room:', conversation._id)
+
+    const handleReceiveMessage = ({ senderId, text, createdAt }) => {
+      // 👇 3. Check if receiver gets the message
+      console.log('📩 Received message:', { senderId, text, createdAt })
+      setLiveMessages(prev => [
+        ...prev,
+        {
+          _id: `live-${Date.now()}`,
+          senderId,
+          text,
+          createdAt,
+          isLive: true
+        }
+      ])
+    }
+
+    socket.on('receive-message', handleReceiveMessage)
 
     return () => {
-      socketRef.current?.emit('leave-room', conversation._id)
-
-      socketRef.current?.off('receive-message', handleReceiveMessage)
+      socket.emit('leave-room', conversation._id)
+      socket.off('receive-message', handleReceiveMessage)
+      socket.disconnect()
+      socketRef.current = null
     }
-  }, [conversation?._id, id, queryClient])
+  }, [conversation?._id])
 
   // ================= AUTO SCROLL =================
-
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: 'smooth'
-    })
-  }, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [dbMessages, liveMessages])
 
   // ================= SEND HANDLER =================
-
   const handleSendMessage = () => {
     if (!message.trim()) return
 
-    const data = {
-      conversationId: id,
+    // 👇 4. Check what sender is emitting
+    console.log('📤 Sending message:', {
+      roomId: conversation._id,
+      id: authUser?._id,
       text: message
-    }
+    })
 
-    sendMessageMutation(data)
+    setLiveMessages(prev => [
+      ...prev,
+      {
+        _id: `live-${Date.now()}`,
+        senderId: authUser?._id,
+        text: message,
+        createdAt: new Date().toISOString(),
+        isLive: true
+      }
+    ])
 
-    // ================= SOCKET MESSAGE =================
+    sendMessageMutation({ conversationId: id, text: message })
 
     socketRef.current?.emit('send-message', {
       roomId: conversation._id,
+      id: authUser?._id,
       text: message
     })
   }
 
   // ================= VIDEO CALL =================
-
-  const handleVideoIcon = () => {
-    navigate(`/call/${id}/video`)
-  }
+  const handleVideoIcon = () => navigate(`/call/${id}/video`)
 
   // ================= LOADING =================
-
   if (isPending) {
-    return (
-      <div className='min-h-screen flex items-center justify-center'>
-        Loading...
-      </div>
-    )
+    return <div className='min-h-screen flex items-center justify-center'>Loading...</div>
   }
 
-  // ================= ERROR =================
-
-  if (isError || !conversation) {
-    return <Navigate to='/' />
-  }
-
-  // ================= OTHER USER =================
+  if (isError || !conversation) return <Navigate to='/' />
 
   const otherMember = conversation.members?.find(
     member => member._id !== authUser?._id
   )
 
-  return (
-    <div
-      data-theme={theme}
-      className='min-h-screen bg-base-200 flex items-center justify-center p-4'
-    >
-      <div className='w-full max-w-6xl h-[95vh] bg-base-100 rounded-2xl shadow-2xl border border-base-300 flex flex-col overflow-hidden'>
-        {/* ================= HEADER ================= */}
+  const allMessages = [...dbMessages, ...liveMessages]
 
+  return (
+    <div data-theme={theme} className='min-h-screen bg-base-200 flex items-center justify-center p-4'>
+      <div className='w-full max-w-6xl h-[95vh] bg-base-100 rounded-2xl shadow-2xl border border-base-300 flex flex-col overflow-hidden'>
+
+        {/* ================= HEADER ================= */}
         <div className='navbar bg-base-100 border-b border-base-300 px-4'>
           <div className='flex-1 gap-3'>
             <div className='avatar online'>
               <div className='w-12 rounded-full'>
                 <img
-                  src={
-                    otherMember?.profilePic ||
-                    'https://randomuser.me/api/portraits/women/44.jpg'
-                  }
+                  src={otherMember?.profilePic || 'https://randomuser.me/api/portraits/women/44.jpg'}
                   alt='profile'
                 />
               </div>
             </div>
-
             <div>
-              <h2 className='font-bold text-lg'>
-                {otherMember?.fullName || 'User'}
-              </h2>
-
-              <p className='text-sm opacity-70'>
-                Room ID: {conversation._id}
-              </p>
+              <h2 className='font-bold text-lg'>{otherMember?.fullName || 'User'}</h2>
+              <p className='text-sm opacity-70'>Room ID: {conversation._id}</p>
             </div>
           </div>
-
           <div className='flex-none'>
-            <button
-              onClick={handleVideoIcon}
-              className='btn btn-success btn-circle'
-            >
+            <button onClick={handleVideoIcon} className='btn btn-success btn-circle'>
               <VideoIcon className='size-5 text-white' />
             </button>
           </div>
         </div>
 
         {/* ================= MESSAGES ================= */}
-
         <div className='flex-1 overflow-y-auto p-6 space-y-6 bg-base-100'>
           <div className='divider text-sm opacity-60'>Messages</div>
 
           {messagesLoading ? (
             <p>Loading Messages...</p>
-          ) : messages.length === 0 ? (
+          ) : allMessages.length === 0 ? (
             <p className='text-center opacity-70'>No messages yet</p>
           ) : (
-            messages.map(msg => {
+            allMessages.map(msg => {
               const isSender =
                 msg.senderId === authUser?._id ||
                 msg.senderId?._id === authUser?._id
 
               return (
-                <div
-                  key={msg._id}
-                  className={`chat ${isSender ? 'chat-end' : 'chat-start'}`}
-                >
-                  {/* Avatar */}
-
+                <div key={msg._id} className={`chat ${isSender ? 'chat-end' : 'chat-start'}`}>
                   <div className='chat-image avatar'>
                     <div className='w-10 rounded-full'>
                       <img
                         alt='user'
-                        src={
-                          isSender
-                            ? authUser?.profilePic
-                            : otherMember?.profilePic
-                        }
+                        src={isSender ? authUser?.profilePic : otherMember?.profilePic}
                       />
                     </div>
                   </div>
-
-                  {/* Name */}
 
                   <div className='chat-header mb-1'>
                     {isSender ? 'You' : otherMember?.fullName}
                   </div>
 
-                  {/* Message */}
-
-                  <div
-                    className={`chat-bubble ${
-                      isSender ? 'chat-bubble-primary' : ''
-                    }`}
-                  >
+                  <div className={`chat-bubble ${isSender ? 'chat-bubble-primary' : ''}`}>
                     {msg.text}
-
                     {msg.image && (
-                      <img
-                        src={msg.image}
-                        alt='message'
-                        className='mt-2 rounded-lg max-w-xs'
-                      />
+                      <img src={msg.image} alt='message' className='mt-2 rounded-lg max-w-xs' />
                     )}
                   </div>
-
-                  {/* Time */}
 
                   <div className='chat-footer opacity-50 text-xs mt-1'>
                     {new Date(msg.createdAt).toLocaleTimeString()}
@@ -274,31 +218,20 @@ const ChatPage = () => {
         </div>
 
         {/* ================= INPUT ================= */}
-
         <div className='border-t border-base-300 bg-base-100 p-4'>
           <div className='flex items-center gap-3'>
-            {/* Upload */}
-
             <button className='btn btn-circle btn-ghost'>
               <ImageIcon className='size-5' />
             </button>
-
-            {/* Input */}
 
             <input
               type='text'
               placeholder='Type your message'
               value={message}
               onChange={e => setMessage(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  handleSendMessage()
-                }
-              }}
+              onKeyDown={e => { if (e.key === 'Enter') handleSendMessage() }}
               className='input input-bordered flex-1 rounded-full'
             />
-
-            {/* Send */}
 
             <button
               onClick={handleSendMessage}
@@ -309,6 +242,7 @@ const ChatPage = () => {
             </button>
           </div>
         </div>
+
       </div>
     </div>
   )
