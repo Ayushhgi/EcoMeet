@@ -7,14 +7,14 @@ import {
 
 import "./index.css";
 
-import Home from "./Pages/Home.jsx";
-import Login from "./Pages/Login.jsx";
-import Signup from "./Pages/Signup.jsx";
-import OnboardingPage from "./Pages/OnboardingPage.jsx";
-import NotificationsPage from "./Pages/NotificationPage.jsx";
-import MyFriends from "./Pages/MyFriends.jsx";
-import ChatPage from "./Pages/ChatPage.jsx";
-import VideoMeeting from "./Pages/videoMeeting.jsx";
+import Home from "./pages/Home.jsx";
+import Login from "./pages/Login.jsx";
+import Signup from "./pages/Signup.jsx";
+import OnboardingPage from "./pages/OnboardingPage.jsx";
+import NotificationsPage from "./pages/NotificationPage.jsx";
+import MyFriends from "./pages/MyFriends.jsx";
+import ChatPage from "./pages/ChatPage.jsx";
+import VideoMeeting from "./pages/videoMeeting.jsx";
 
 import Navbar from "./components/Navbar.jsx";
 import PageLoader from "./components/PageLoader.jsx";
