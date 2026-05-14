@@ -2,25 +2,36 @@ import { ImageIcon, SendHorizonalIcon, VideoIcon } from 'lucide-react'
 import { useThemeStore } from '../store/useThemeStore'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { getConversation, getMessages, sendMessage } from '../lib/api'
 import useAuthUser from '../hooks/useAuthUser'
-import server from '../../environment'
+
+const SOCKET_URL =
+  import.meta.env.MODE === 'production'
+    ? 'https://backendecomeet.onrender.com'
+    : 'http://localhost:9002'
 
 const ChatPage = () => {
   const { theme } = useThemeStore()
+
   const { id } = useParams()
+
   const navigate = useNavigate()
+
   const messagesEndRef = useRef(null)
+
   const socketRef = useRef(null)
 
   const [message, setMessage] = useState('')
+
+  // ONLY LIVE SOCKET MESSAGES
   const [liveMessages, setLiveMessages] = useState([])
 
   const { authUser } = useAuthUser()
 
   // ================= CONVERSATION =================
+
   const {
     data: conversation,
     isPending,
@@ -31,7 +42,8 @@ const ChatPage = () => {
     enabled: !!id
   })
 
-  // ================= MESSAGES (DB — only on mount/reload) =================
+  // ================= DB MESSAGES =================
+
   const { data: dbMessages = [], isLoading: messagesLoading } = useQuery({
     queryKey: ['messages', id],
     queryFn: () => getMessages(id),
@@ -42,116 +54,150 @@ const ChatPage = () => {
   })
 
   // ================= SEND MESSAGE =================
+
   const { mutate: sendMessageMutation, isPending: sendingMessage } =
     useMutation({
       mutationFn: sendMessage,
+
       onSuccess: () => {
         setMessage('')
       }
     })
 
-  // ================= SOCKET + ROOM JOIN =================
-  useEffect(() => {
-    if (!conversation?._id) return
+  // ================= SOCKET =================
 
+  useEffect(() => {
+    if (!conversation?._id || !authUser?._id) return
+
+    // CREATE SOCKET ONLY ONCE
     if (!socketRef.current) {
-      socketRef.current = io('https://backendecomeet.onrender.com', {
+      socketRef.current = io(SOCKET_URL, {
         withCredentials: true
       })
     }
 
     const socket = socketRef.current
 
-    // 👇 1. Check socket connected
+    // CONNECT
+    socket.off('connect')
+
     socket.on('connect', () => {
-      console.log('✅ Socket connected:', socket.id)
+      console.log('✅ CONNECTED:', socket.id)
+
+      socket.emit('join-room', conversation._id)
+
+      console.log('🚪 JOINED ROOM:', conversation._id)
     })
 
-    socket.emit('join-room', conversation._id)
-    // 👇 2. Check room joined
-    console.log('🚪 Joining room:', conversation._id)
-
-    // const handleReceiveMessage = ({ senderId, text, createdAt }) => {
-    //   // 👇 3. Check if receiver gets the message
-    //   console.log('📩 Received message:', { senderId, text, createdAt })
-    //   setLiveMessages(prev => [
-    //     ...prev,
-    //     {
-    //       _id: `live-${Date.now()}`,
-    //       senderId,
-    //       text,
-    //       createdAt,
-    //       isLive: true
-    //     }
-    //   ])
-    // }
-
-    socket.on('receive-message', data => {
-      // IGNORE OWN MESSAGE
-      if (data.senderId === authUser?._id) return
-
-      console.log('📩 Received message:', data)
-
-      setLiveMessages(prev => [
-        ...prev,
-        {
-          _id: `live-${Date.now()}`,
-          senderId: data.senderId,
-          text: data.text,
-          createdAt: data.createdAt,
-          isLive: true
-        }
-      ])
-    })
-
-    return () => {
-      socket.emit('leave-room', conversation._id)
-      socket.off('receive-message', handleReceiveMessage)
-      socket.disconnect()
-      socketRef.current = null
+    // IF ALREADY CONNECTED
+    if (socket.connected) {
+      socket.emit('join-room', conversation._id)
     }
-  }, [conversation?._id])
+
+    // RECEIVE MESSAGE
+    const handleReceiveMessage = data => {
+      console.log('📩 RECEIVED:', data)
+
+      const senderId = data.senderId
+
+      // IGNORE OWN MESSAGE
+      if (senderId === authUser?._id) return
+
+      setLiveMessages(prev => {
+        // DUPLICATE PREVENTION
+        const alreadyExists = prev.some(
+          msg =>
+            msg.text === data.text &&
+            msg.senderId === data.senderId &&
+            msg.createdAt === data.createdAt
+        )
+
+        if (alreadyExists) return prev
+
+        return [
+          ...prev,
+          {
+            _id: `live-${Date.now()}`,
+            senderId: data.senderId,
+            text: data.text,
+            createdAt: data.createdAt,
+            isLive: true
+          }
+        ]
+      })
+    }
+
+    // REMOVE OLD LISTENER
+    socket.off('receive-message', handleReceiveMessage)
+
+    // NEW LISTENER
+    socket.on('receive-message', handleReceiveMessage)
+
+    // CLEANUP
+    return () => {
+      socket.off('receive-message', handleReceiveMessage)
+    }
+  }, [conversation?._id, authUser?._id])
 
   // ================= AUTO SCROLL =================
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({
+      behavior: 'smooth'
+    })
   }, [dbMessages, liveMessages])
 
-  // ================= SEND HANDLER =================
+  // ================= SEND =================
+
   const handleSendMessage = () => {
     if (!message.trim()) return
 
-    // 👇 4. Check what sender is emitting
+    if (!socketRef.current?.connected) {
+      console.log('❌ SOCKET NOT CONNECTED')
+      return
+    }
+
+    const newMessage = {
+      _id: `local-${Date.now()}`,
+      senderId: authUser?._id,
+      text: message,
+      createdAt: new Date().toISOString(),
+      isLive: true
+    }
+
+    // INSTANT LOCAL UI
+    setLiveMessages(prev => [...prev, newMessage])
+
     console.log('📤 Sending message:', {
       roomId: conversation._id,
       id: authUser?._id,
       text: message
     })
 
-    setLiveMessages(prev => [
-      ...prev,
-      {
-        _id: `live-${Date.now()}`,
-        senderId: authUser?._id,
-        text: message,
-        createdAt: new Date().toISOString(),
-        isLive: true
-      }
-    ])
+    // SAVE TO DATABASE
+    sendMessageMutation({
+      conversationId: id,
+      text: message
+    })
 
-    sendMessageMutation({ conversationId: id, text: message })
-
-    socketRef.current?.emit('send-message', {
+    // SOCKET EMIT
+    socketRef.current.emit('send-message', {
       roomId: conversation._id,
       id: authUser?._id,
       text: message
     })
+
+    setMessage('')
   }
 
   // ================= VIDEO CALL =================
-  const handleVideoIcon = () => navigate(`/call/${id}/video`)
+
+  const handleVideoIcon = () => {
+    navigate(`/call/${id}/video`)
+  }
 
   // ================= LOADING =================
+
   if (isPending) {
     return (
       <div className='min-h-screen flex items-center justify-center'>
@@ -160,13 +206,39 @@ const ChatPage = () => {
     )
   }
 
-  if (isError || !conversation) return <Navigate to='/' />
+  // ================= ERROR =================
+
+  if (isError || !conversation) {
+    return <Navigate to='/' />
+  }
+
+  // ================= OTHER USER =================
 
   const otherMember = conversation.members?.find(
     member => member._id !== authUser?._id
   )
 
-  const allMessages = [...dbMessages, ...liveMessages]
+  // ================= MERGE MESSAGES =================
+
+  const allMessages = useMemo(() => {
+    const combined = [...dbMessages, ...liveMessages]
+
+    // REMOVE DUPLICATES
+    const uniqueMessages = combined.filter((msg, index, self) => {
+      return (
+        index ===
+        self.findIndex(
+          m =>
+            m.text === msg.text &&
+            (m.senderId?._id || m.senderId) ===
+              (msg.senderId?._id || msg.senderId) &&
+            m.createdAt === msg.createdAt
+        )
+      )
+    })
+
+    return uniqueMessages
+  }, [dbMessages, liveMessages])
 
   return (
     <div
@@ -175,6 +247,7 @@ const ChatPage = () => {
     >
       <div className='w-full max-w-6xl h-[95vh] bg-base-100 rounded-2xl shadow-2xl border border-base-300 flex flex-col overflow-hidden'>
         {/* ================= HEADER ================= */}
+
         <div className='navbar bg-base-100 border-b border-base-300 px-4'>
           <div className='flex-1 gap-3'>
             <div className='avatar online'>
@@ -188,13 +261,18 @@ const ChatPage = () => {
                 />
               </div>
             </div>
+
             <div>
               <h2 className='font-bold text-lg'>
                 {otherMember?.fullName || 'User'}
               </h2>
-              <p className='text-sm opacity-70'>Room ID: {conversation._id}</p>
+
+              <p className='text-sm opacity-70'>
+                Room ID: {conversation._id}
+              </p>
             </div>
           </div>
+
           <div className='flex-none'>
             <button
               onClick={handleVideoIcon}
@@ -206,6 +284,7 @@ const ChatPage = () => {
         </div>
 
         {/* ================= MESSAGES ================= */}
+
         <div className='flex-1 overflow-y-auto p-6 space-y-6 bg-base-100'>
           <div className='divider text-sm opacity-60'>Messages</div>
 
@@ -215,15 +294,17 @@ const ChatPage = () => {
             <p className='text-center opacity-70'>No messages yet</p>
           ) : (
             allMessages.map(msg => {
-              const isSender =
-                msg.senderId === authUser?._id ||
-                msg.senderId?._id === authUser?._id
+              const currentSenderId = msg.senderId?._id || msg.senderId
+
+              const isSender = currentSenderId === authUser?._id
 
               return (
                 <div
                   key={msg._id}
                   className={`chat ${isSender ? 'chat-end' : 'chat-start'}`}
                 >
+                  {/* AVATAR */}
+
                   <div className='chat-image avatar'>
                     <div className='w-10 rounded-full'>
                       <img
@@ -237,9 +318,13 @@ const ChatPage = () => {
                     </div>
                   </div>
 
+                  {/* NAME */}
+
                   <div className='chat-header mb-1'>
                     {isSender ? 'You' : otherMember?.fullName}
                   </div>
+
+                  {/* MESSAGE */}
 
                   <div
                     className={`chat-bubble ${
@@ -247,6 +332,7 @@ const ChatPage = () => {
                     }`}
                   >
                     {msg.text}
+
                     {msg.image && (
                       <img
                         src={msg.image}
@@ -255,6 +341,8 @@ const ChatPage = () => {
                       />
                     )}
                   </div>
+
+                  {/* TIME */}
 
                   <div className='chat-footer opacity-50 text-xs mt-1'>
                     {new Date(msg.createdAt).toLocaleTimeString()}
@@ -268,11 +356,16 @@ const ChatPage = () => {
         </div>
 
         {/* ================= INPUT ================= */}
+
         <div className='border-t border-base-300 bg-base-100 p-4'>
           <div className='flex items-center gap-3'>
+            {/* IMAGE */}
+
             <button className='btn btn-circle btn-ghost'>
               <ImageIcon className='size-5' />
             </button>
+
+            {/* INPUT */}
 
             <input
               type='text'
@@ -280,10 +373,14 @@ const ChatPage = () => {
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') handleSendMessage()
+                if (e.key === 'Enter') {
+                  handleSendMessage()
+                }
               }}
               className='input input-bordered flex-1 rounded-full'
             />
+
+            {/* SEND */}
 
             <button
               onClick={handleSendMessage}
