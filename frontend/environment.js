@@ -1,4 +1,5 @@
-let prodution=true;
-let server=prodution?"https://backendecomeet.onrender.com":"http://localhost:9002";
+let server = import.meta.env.MODE==="production"
+  ? "https://backendecomeet.onrender.com/api"
+  : "http://localhost:9002/api";
 
 export default server;
