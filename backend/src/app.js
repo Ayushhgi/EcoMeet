@@ -29,7 +29,7 @@ app.get('/home', (req, res) => {
 
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin: 'https://ecomeet-ed87.onrender.com',
     credentials: true, //allow frontend to send the cookie
   })
 );
