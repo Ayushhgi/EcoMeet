@@ -1,20 +1,15 @@
 import { ImageIcon, SendHorizonalIcon, VideoIcon } from 'lucide-react'
-
 import { useThemeStore } from '../store/useThemeStore'
-
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-
 import { useEffect, useRef, useState } from 'react'
-
 import { io } from 'socket.io-client'
-
 import { getConversation, getMessages, sendMessage } from '../lib/api'
-
 import useAuthUser from '../hooks/useAuthUser'
+import server from '../../environment'
+// ================= SERVER URL =================
 
-const socket = io('http://localhost:9002')
+// ================= COMPONENT =================
 
 const ChatPage = () => {
   const { theme } = useThemeStore()
@@ -27,9 +22,28 @@ const ChatPage = () => {
 
   const messagesEndRef = useRef(null)
 
+  // ================= SOCKET REF =================
+
+  const socketRef = useRef(null)
+
   const [message, setMessage] = useState('')
 
   const { authUser } = useAuthUser()
+
+  // ================= SOCKET CONNECTION =================
+
+  useEffect(() => {
+    if (!socketRef.current) {
+      socketRef.current = io(server, {
+        withCredentials: true,
+        transports: ['websocket']
+      })
+    }
+
+    return () => {
+      socketRef.current?.disconnect()
+    }
+  }, [])
 
   // ================= CONVERSATION =================
 
@@ -39,11 +53,10 @@ const ChatPage = () => {
     isError
   } = useQuery({
     queryKey: ['conversation', id],
-    queryFn: () => getConversation(id)
+    queryFn: () => getConversation(id),
+    enabled: !!id
   })
-  //   useEffect(() => {
-  //   console.log("Conversation Data:", conversation);
-  // }, [conversation]);
+
   // ================= MESSAGES =================
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery({
@@ -54,35 +67,38 @@ const ChatPage = () => {
 
   // ================= SEND MESSAGE =================
 
-  const { mutate: sendMessageMutation } = useMutation({
-    mutationFn: sendMessage,
+  const { mutate: sendMessageMutation, isPending: sendingMessage } =
+    useMutation({
+      mutationFn: sendMessage,
 
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['messages', id]
-      })
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: ['messages', id]
+        })
 
-      setMessage('')
-    }
-  })
-
-  // ================= SOCKET =================
-
-  useEffect(() => {
-    if (!conversation?._id) return
-
-    socket.emit('join-room', conversation._id)
-
-    socket.on('receive-message', () => {
-      queryClient.invalidateQueries({
-        queryKey: ['messages', id]
-      })
+        setMessage('')
+      }
     })
 
-    return () => {
-      socket.emit('leave-room', conversation._id)
+  // ================= ROOM JOIN =================
 
-      socket.off('receive-message')
+  useEffect(() => {
+    if (!conversation?._id || !socketRef.current) return
+
+    socketRef.current.emit('join-room', conversation._id)
+
+    const handleReceiveMessage = () => {
+      queryClient.invalidateQueries({
+        queryKey: ['messages', id]
+      })
+    }
+
+    socketRef.current.on('receive-message', handleReceiveMessage)
+
+    return () => {
+      socketRef.current?.emit('leave-room', conversation._id)
+
+      socketRef.current?.off('receive-message', handleReceiveMessage)
     }
   }, [conversation?._id, id, queryClient])
 
@@ -106,7 +122,9 @@ const ChatPage = () => {
 
     sendMessageMutation(data)
 
-    socket.emit('send-message', {
+    // ================= SOCKET MESSAGE =================
+
+    socketRef.current?.emit('send-message', {
       roomId: conversation._id,
       text: message
     })
@@ -137,7 +155,7 @@ const ChatPage = () => {
   // ================= OTHER USER =================
 
   const otherMember = conversation.members?.find(
-    member => member._id !== authUser._id
+    member => member._id !== authUser?._id
   )
 
   return (
@@ -167,7 +185,9 @@ const ChatPage = () => {
                 {otherMember?.fullName || 'User'}
               </h2>
 
-              <p className='text-sm opacity-70'>Room ID: {conversation._id}</p>
+              <p className='text-sm opacity-70'>
+                Room ID: {conversation._id}
+              </p>
             </div>
           </div>
 
@@ -193,8 +213,8 @@ const ChatPage = () => {
           ) : (
             messages.map(msg => {
               const isSender =
-                msg.senderId === authUser._id ||
-                msg.senderId?._id === authUser._id
+                msg.senderId === authUser?._id ||
+                msg.senderId?._id === authUser?._id
 
               return (
                 <div
@@ -202,6 +222,7 @@ const ChatPage = () => {
                   className={`chat ${isSender ? 'chat-end' : 'chat-start'}`}
                 >
                   {/* Avatar */}
+
                   <div className='chat-image avatar'>
                     <div className='w-10 rounded-full'>
                       <img
@@ -216,11 +237,13 @@ const ChatPage = () => {
                   </div>
 
                   {/* Name */}
+
                   <div className='chat-header mb-1'>
                     {isSender ? 'You' : otherMember?.fullName}
                   </div>
 
-                  {/* Bubble */}
+                  {/* Message */}
+
                   <div
                     className={`chat-bubble ${
                       isSender ? 'chat-bubble-primary' : ''
@@ -238,6 +261,7 @@ const ChatPage = () => {
                   </div>
 
                   {/* Time */}
+
                   <div className='chat-footer opacity-50 text-xs mt-1'>
                     {new Date(msg.createdAt).toLocaleTimeString()}
                   </div>
@@ -254,11 +278,13 @@ const ChatPage = () => {
         <div className='border-t border-base-300 bg-base-100 p-4'>
           <div className='flex items-center gap-3'>
             {/* Upload */}
+
             <button className='btn btn-circle btn-ghost'>
               <ImageIcon className='size-5' />
             </button>
 
             {/* Input */}
+
             <input
               type='text'
               placeholder='Type your message'
@@ -273,9 +299,10 @@ const ChatPage = () => {
             />
 
             {/* Send */}
+
             <button
               onClick={handleSendMessage}
-              disabled={!message.trim()}
+              disabled={!message.trim() || sendingMessage}
               className='btn btn-primary btn-circle'
             >
               <SendHorizonalIcon className='size-5' />
