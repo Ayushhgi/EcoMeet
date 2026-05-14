@@ -24,12 +24,9 @@ app.get('/home', (req, res) => {
   return res.json({ hello: 'world' });
 });
 
-
-
-
 app.use(
   cors({
-    origin: 'https://backendecomeet.onrender.com',
+    origin: 'https://ecomeet-ed87.onrender.com/',
     credentials: true, //allow frontend to send the cookie
   })
 );
