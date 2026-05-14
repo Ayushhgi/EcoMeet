@@ -11,6 +11,7 @@ import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
 import messageRoutes from './routes/message.route.js'
 import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 const server = createServer(app); 
@@ -23,6 +24,10 @@ const dbUrl =process.env.MONGODB_URL;
 app.get('/home', (req, res) => {
   return res.json({ hello: 'world' });
 });
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 app.use(
@@ -43,11 +48,12 @@ app.use('/api/users', userRoutes)
 app.use('/api/conversation-room',conversationRoutes);
 app.use("/api/message", messageRoutes);
 
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
+app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+  res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
 });
+
 
 app.set("port", (process.env.PORT || 9002));
 const start = async () => {
