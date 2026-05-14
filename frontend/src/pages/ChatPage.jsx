@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { getConversation, getMessages, sendMessage } from '../lib/api'
 import useAuthUser from '../hooks/useAuthUser'
+// import server from '../../environment'
 
 const ChatPage = () => {
   const { theme } = useThemeStore()
@@ -61,42 +62,54 @@ const ChatPage = () => {
 
     const socket = socketRef.current
 
-    // 👇 1. Check socket connected
+    // SOCKET CONNECTED
     socket.on('connect', () => {
       console.log('✅ Socket connected:', socket.id)
     })
 
+    // JOIN ROOM
     socket.emit('join-room', conversation._id)
-    // 👇 2. Check room joined
+
     console.log('🚪 Joining room:', conversation._id)
 
-   
-
-    socket.on('receive-message', data => {
+    // RECEIVE MESSAGE
+    const handleReceiveMessage = data => {
       // IGNORE OWN MESSAGE
       if (data.senderId === authUser?._id) return
 
       console.log('📩 Received message:', data)
+
+      let parsedText = data.text
+
+      // PARSE VIDEO INVITE MESSAGE
+      try {
+        parsedText = JSON.parse(data.text)
+      } catch (error) {}
 
       setLiveMessages(prev => [
         ...prev,
         {
           _id: `live-${Date.now()}`,
           senderId: data.senderId,
-          text: data.text,
+          text: parsedText,
           createdAt: data.createdAt,
           isLive: true
         }
       ])
-    })
+    }
+
+    // REMOVE OLD LISTENER
+    socket.off('receive-message', handleReceiveMessage)
+
+    // NEW LISTENER
+    socket.on('receive-message', handleReceiveMessage)
 
     return () => {
       socket.emit('leave-room', conversation._id)
+
       socket.off('receive-message', handleReceiveMessage)
-      socket.disconnect()
-      socketRef.current = null
     }
-  }, [conversation?._id])
+  }, [conversation?._id, authUser?._id])
 
   // ================= AUTO SCROLL =================
   useEffect(() => {
