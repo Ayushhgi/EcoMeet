@@ -4,7 +4,7 @@ let connections = {}
 let timeOnline = {}
 let messages = {}
 
-export const connectToSocket = server => {
+export const connectToVideoMeetSocket = server => {
   const io = new Server(server, {
     cors: {
       origin: 'https://ecomeet-ed87.onrender.com', // All client domain
@@ -14,7 +14,7 @@ export const connectToSocket = server => {
   })
 
   io.on('connection', socket => {
-    console.log('someone is connected')
+    console.log('someone is connected in VideoMeetComponent')
     // console.log(window.location.href);
     // console.log(window.location.href);
     socket.on('join-call', path => {

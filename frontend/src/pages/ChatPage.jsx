@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { getConversation, getMessages, sendMessage } from '../lib/api'
 import useAuthUser from '../hooks/useAuthUser'
-import server from '../../environment'
 
 const ChatPage = () => {
   const { theme } = useThemeStore()
@@ -71,20 +70,7 @@ const ChatPage = () => {
     // 👇 2. Check room joined
     console.log('🚪 Joining room:', conversation._id)
 
-    // const handleReceiveMessage = ({ senderId, text, createdAt }) => {
-    //   // 👇 3. Check if receiver gets the message
-    //   console.log('📩 Received message:', { senderId, text, createdAt })
-    //   setLiveMessages(prev => [
-    //     ...prev,
-    //     {
-    //       _id: `live-${Date.now()}`,
-    //       senderId,
-    //       text,
-    //       createdAt,
-    //       isLive: true
-    //     }
-    //   ])
-    // }
+   
 
     socket.on('receive-message', data => {
       // IGNORE OWN MESSAGE

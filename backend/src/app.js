@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import cookieParser from "cookie-parser";
 import { connectToSocket } from './controllers/socketChatManager.js';
+import {connectToVideoMeetSocket} from './controllers/socketManager.js'
 import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
@@ -17,6 +18,7 @@ import path from 'path';
 const app = express();
 const server = createServer(app); 
 connectToSocket(server);
+connectToVideoMeetSocket(server);
 
 dotenv.config({ path: "./.env" });
 
