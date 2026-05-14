@@ -10,8 +10,7 @@ import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
 import messageRoutes from './routes/message.route.js'
-import path from "path";
-import { fileURLToPath } from "url";
+
 
 const app = express();
 const server = createServer(app); 
@@ -26,13 +25,11 @@ app.get('/home', (req, res) => {
 });
 
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 
 app.use(
   cors({
-    origin: "https://ecomeet-1.onrender.com",
+    origin: 'http://localhost:5173',
     credentials: true, //allow frontend to send the cookie
   })
 );
@@ -47,12 +44,6 @@ app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/conversation-room',conversationRoutes);
 app.use("/api/message", messageRoutes);
-
-app.use(express.static(path.join(__dirname, "../../frontend/dist")));
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
-});
 
 
 app.set("port", (process.env.PORT || 9002));
