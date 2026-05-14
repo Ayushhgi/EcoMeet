@@ -3,7 +3,7 @@ import { Server } from 'socket.io'
 export const connectToSocket = server => {
   const io = new Server(server, {
     cors: {
-      origin: 'https://backendecomeet.onrender.com',
+      origin: 'https://ecomeet-ed87.onrender.com',
       methods: ['GET', 'POST'],
       credentials: true
     }
