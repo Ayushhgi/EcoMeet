@@ -11,9 +11,8 @@ import MicOffIcon from '@mui/icons-material/MicOff'
 import ScreenShareIcon from '@mui/icons-material/ScreenShare'
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare'
 
-// ─── WebRTC globals ────────────────────────────────────────────────────────────
+// ─── WebRTC globals ─────────────────────────────────────────── (UNCHANGED) ───
 var connections = {}
-
 const peerConfigConnections = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -21,7 +20,7 @@ const peerConfigConnections = {
   ],
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────── (UNCHANGED) ───
 const silence = () => {
   let ctx = new AudioContext()
   let oscillator = ctx.createOscillator()
@@ -30,7 +29,6 @@ const silence = () => {
   ctx.resume()
   return Object.assign(dst.stream.getAudioTracks()[0], { enabled: false })
 }
-
 const black = ({ width = 640, height = 480 } = {}) => {
   let canvas = Object.assign(document.createElement('canvas'), { width, height })
   canvas.getContext('2d').fillRect(0, 0, width, height)
@@ -38,82 +36,87 @@ const black = ({ width = 640, height = 480 } = {}) => {
   return Object.assign(stream.getVideoTracks()[0], { enabled: false })
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────────
+// ─── Meeting Timer ────────────────────────────────────────────────────────────
+const MeetingTimer = () => {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setSeconds(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const hh = String(Math.floor(seconds / 3600)).padStart(2, '0')
+  const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')
+  const ss = String(seconds % 60).padStart(2, '0')
+  return (
+    <span className="font-mono text-sm text-neutral-content/50 tabular-nums">
+      {hh}:{mm}:{ss}
+    </span>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const VideoMeeting = () => {
-  const { id } = useParams()           // conversation / room id from URL
+  const { id } = useParams()
   const navigate = useNavigate()
   const { authUser } = useAuthUser()
 
   // refs
-  const socketRef      = useRef()
-  const socketIdRef    = useRef()
-  const localVideoref  = useRef()
-  const videoRef       = useRef([])
+  const socketRef     = useRef()
+  const socketIdRef   = useRef()
+  const localVideoref = useRef()
+  const videoRef      = useRef([])
 
-  // media capability flags
+  // media capability
   const [videoAvailable,  setVideoAvailable]  = useState(true)
   const [audioAvailable,  setAudioAvailable]  = useState(true)
   const [screenAvailable, setScreenAvailable] = useState(false)
 
-  // media toggle state
+  // media toggles
   const [video,  setVideo]  = useState()
   const [audio,  setAudio]  = useState()
   const [screen, setScreen] = useState()
 
-  // UI state
-  const [lobbyState, setLobbyState] = useState('idle') // 'idle' | 'validating' | 'ready' | 'unauthorized' | 'error'
-  const [inMeeting,  setInMeeting]  = useState(false)
-  const [videos,     setVideos]     = useState([])
-  const [speakingId, setSpeakingId] = useState(null)  // socket id with loudest audio
+  // status & peers
+  const [status, setStatus] = useState('validating') // 'validating' | 'ready' | 'unauthorized' | 'error'
+  const [videos, setVideos] = useState([])
 
-  // ─── 1. Validate room on mount ────────────────────────────────────────────
+  // ── 1. Validate room + auto-connect ───────────────────────────────────────
   useEffect(() => {
     if (!id || !authUser) return
-
-    const validate = async () => {
-      setLobbyState('validating')
+    const init = async () => {
       try {
         const conversation = await getConversation(id)
         const memberIds = conversation.members?.map(m => m._id || m)
-        const isAllowed = memberIds?.includes(authUser._id)
-        setLobbyState(isAllowed ? 'ready' : 'unauthorized')
+        const allowed = memberIds?.includes(authUser._id)
+        if (!allowed) { setStatus('unauthorized'); return }
+        setStatus('ready')
+        await getPermissions()
+        connectToSocketServer()
       } catch {
-        setLobbyState('error')
+        setStatus('error')
       }
     }
-
-    validate()
+    init()
   }, [id, authUser])
 
-  // ─── 2. Request permissions once ─────────────────────────────────────────
-  useEffect(() => {
-    getPermissions()
-  }, [])
-
+  // ── 2. Permissions ────────────────────────────────────────────────────────
   const getPermissions = async () => {
     try {
       const vp = await navigator.mediaDevices.getUserMedia({ video: true }).catch(() => null)
       setVideoAvailable(!!vp)
-
       const ap = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null)
       setAudioAvailable(!!ap)
-
       setScreenAvailable(!!navigator.mediaDevices.getDisplayMedia)
-
       if (vp || ap) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: !!vp,
-          audio: !!ap,
-        })
+        const stream = await navigator.mediaDevices.getUserMedia({ video: !!vp, audio: !!ap })
         window.localStream = stream
         if (localVideoref.current) localVideoref.current.srcObject = stream
+        setVideo(!!vp)
+        setAudio(!!ap)
       }
-    } catch (e) {
-      console.log(e)
-    }
+    } catch (e) { console.log(e) }
   }
 
-  // ─── 3. Re-acquire media when toggles change ──────────────────────────────
+  // ── 3. Re-acquire media on toggle ─────────────────────────────────────────
   useEffect(() => {
     if (video !== undefined && audio !== undefined) getUserMedia()
   }, [audio, video])
@@ -125,19 +128,15 @@ const VideoMeeting = () => {
         .then(getUserMediaSuccess)
         .catch(e => console.log(e))
     } else {
-      try {
-        localVideoref.current?.srcObject?.getTracks().forEach(t => t.stop())
-      } catch (e) {}
+      try { localVideoref.current?.srcObject?.getTracks().forEach(t => t.stop()) } catch (e) {}
     }
   }
 
-  // ─── getUserMediaSuccess — unchanged WebRTC logic ─────────────────────────
+  // ── getUserMediaSuccess ─────────────────────────────────────── UNCHANGED ──
   const getUserMediaSuccess = stream => {
     try { window.localStream.getTracks().forEach(t => t.stop()) } catch (e) {}
-
     window.localStream = stream
     localVideoref.current.srcObject = stream
-
     for (let id in connections) {
       if (id === socketIdRef.current) continue
       connections[id].addStream(window.localStream)
@@ -147,7 +146,6 @@ const VideoMeeting = () => {
         }).catch(e => console.log(e))
       })
     }
-
     stream.getTracks().forEach(track => {
       track.onended = () => {
         setVideo(false)
@@ -169,7 +167,7 @@ const VideoMeeting = () => {
     })
   }
 
-  // ─── gotMessageFromServer — unchanged WebRTC logic ────────────────────────
+  // ── gotMessageFromServer ────────────────────────────────────── UNCHANGED ──
   const gotMessageFromServer = (fromId, message) => {
     var signal = JSON.parse(message)
     if (fromId !== socketIdRef.current) {
@@ -190,11 +188,10 @@ const VideoMeeting = () => {
     }
   }
 
-  // ─── connectToSocketServer — unchanged WebRTC logic ──────────────────────
+  // ── connectToSocketServer ───────────────────────────────────── UNCHANGED ──
   const connectToSocketServer = () => {
     socketRef.current = io.connect('https://backendecomeet.onrender.com', { secure: false })
     socketRef.current.on('signal', gotMessageFromServer)
-
     socketRef.current.on('connect', () => {
       socketRef.current.emit('join-call', window.location.href)
       socketIdRef.current = socketRef.current.id
@@ -257,7 +254,7 @@ const VideoMeeting = () => {
     })
   }
 
-  // ─── Screen share — unchanged WebRTC logic ────────────────────────────────
+  // ── Screen share ────────────────────────────────────────────── UNCHANGED ──
   useEffect(() => {
     if (screen !== undefined) getDisplayMedia()
   }, [screen])
@@ -274,7 +271,6 @@ const VideoMeeting = () => {
     try { window.localStream.getTracks().forEach(t => t.stop()) } catch (e) {}
     window.localStream = stream
     localVideoref.current.srcObject = stream
-
     for (let id in connections) {
       if (id === socketIdRef.current) continue
       connections[id].addStream(window.localStream)
@@ -284,7 +280,6 @@ const VideoMeeting = () => {
         }).catch(e => console.log(e))
       })
     }
-
     stream.getTracks().forEach(track => {
       track.onended = () => {
         setScreen(false)
@@ -297,57 +292,45 @@ const VideoMeeting = () => {
     })
   }
 
-  // ─── Join handler ─────────────────────────────────────────────────────────
-  const handleJoin = () => {
-    setInMeeting(true)
-    setVideo(videoAvailable)
-    setAudio(audioAvailable)
-    connectToSocketServer()
-  }
-
-  // ─── Leave handler ────────────────────────────────────────────────────────
+  // ── Leave ─────────────────────────────────────────────────────────────────
   const handleEndCall = () => {
     try { localVideoref.current.srcObject.getTracks().forEach(t => t.stop()) } catch (e) {}
-    // disconnect socket
     if (socketRef.current) socketRef.current.disconnect()
     navigate('/')
   }
 
-  // ─── Toggle handlers ──────────────────────────────────────────────────────
   const handleVideo  = () => setVideo(v => !v)
   const handleAudio  = () => setAudio(v => !v)
   const handleScreen = () => setScreen(v => !v)
 
-  // ─── RENDER: validating ───────────────────────────────────────────────────
-  if (lobbyState === 'validating') {
+  // ── Connecting ────────────────────────────────────────────────────────────
+  if (status === 'validating') {
     return (
-      <div className="min-h-screen bg-base-200 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <span className="loading loading-ring loading-lg text-primary"></span>
-          <p className="text-base-content/60 text-sm">Verifying access…</p>
-        </div>
+      <div className="min-h-screen bg-neutral flex flex-col items-center justify-center gap-4" data-theme="dark">
+        <span className="loading loading-ring loading-lg text-primary" />
+        <p className="text-neutral-content/40 text-sm tracking-wide">Connecting to meeting…</p>
       </div>
     )
   }
 
-  // ─── RENDER: unauthorized ─────────────────────────────────────────────────
-  if (lobbyState === 'unauthorized') {
+  // ── Unauthorized ──────────────────────────────────────────────────────────
+  if (status === 'unauthorized') {
     return (
-      <div className="min-h-screen bg-base-200 flex items-center justify-center p-4">
-        <div className="card bg-base-100 shadow-xl border border-error/20 max-w-md w-full">
-          <div className="card-body items-center text-center gap-4">
-            <div className="bg-error/10 rounded-full p-4">
+      <div className="min-h-screen bg-neutral flex items-center justify-center p-4" data-theme="dark">
+        <div className="card bg-base-100 shadow-2xl max-w-sm w-full">
+          <div className="card-body items-center text-center gap-5 py-10">
+            <div className="rounded-full bg-error/10 p-5">
               <svg className="w-10 h-10 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
               </svg>
             </div>
-            <h2 className="card-title text-error text-xl">Access Denied</h2>
-            <p className="text-base-content/60 text-sm">
-              You're not a participant in this meeting room. Only invited members can join.
-            </p>
-            <button onClick={() => navigate('/')} className="btn btn-error btn-outline w-full mt-2">
-              Go Back Home
+            <div>
+              <h2 className="card-title justify-center text-xl mb-1">Access Denied</h2>
+              <p className="text-base-content/50 text-sm">You're not a member of this meeting room.</p>
+            </div>
+            <button onClick={() => navigate('/')} className="btn btn-error btn-outline w-full">
+              Go Home
             </button>
           </div>
         </div>
@@ -355,236 +338,200 @@ const VideoMeeting = () => {
     )
   }
 
-  // ─── RENDER: error ────────────────────────────────────────────────────────
-  if (lobbyState === 'error') {
+  // ── Error ─────────────────────────────────────────────────────────────────
+  if (status === 'error') {
     return (
-      <div className="min-h-screen bg-base-200 flex items-center justify-center p-4">
-        <div className="card bg-base-100 shadow-xl max-w-md w-full">
-          <div className="card-body items-center text-center gap-4">
-            <div className="bg-warning/10 rounded-full p-4">
+      <div className="min-h-screen bg-neutral flex items-center justify-center p-4" data-theme="dark">
+        <div className="card bg-base-100 shadow-2xl max-w-sm w-full">
+          <div className="card-body items-center text-center gap-5 py-10">
+            <div className="rounded-full bg-warning/10 p-5">
               <svg className="w-10 h-10 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                   d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
             </div>
-            <h2 className="card-title text-xl">Room Not Found</h2>
-            <p className="text-base-content/60 text-sm">Couldn't load this meeting room. It may have been deleted or the link is invalid.</p>
-            <button onClick={() => navigate('/')} className="btn btn-primary w-full mt-2">Go Back Home</button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ─── RENDER: Lobby ────────────────────────────────────────────────────────
-  if (!inMeeting) {
-    return (
-      <div className="min-h-screen bg-base-200 flex items-center justify-center p-4">
-        <div className="card bg-base-100 shadow-2xl border border-base-300 w-full max-w-2xl">
-          <div className="card-body gap-6">
-
-            {/* Header */}
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center bg-primary/10 rounded-2xl p-3 mb-3">
-                <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-base-content">Ready to join?</h2>
-              <p className="text-base-content/50 text-sm mt-1">Check your camera and mic before entering</p>
+            <div>
+              <h2 className="card-title justify-center text-xl mb-1">Room Not Found</h2>
+              <p className="text-base-content/50 text-sm">This room doesn't exist or the link is invalid.</p>
             </div>
-
-            {/* Camera preview */}
-            <div className="relative rounded-2xl overflow-hidden bg-base-300 aspect-video">
-              <video
-                ref={localVideoref}
-                autoPlay
-                muted
-                className="w-full h-full object-cover"
-              />
-              {/* Dim overlay with label */}
-              <div className="absolute inset-0 flex items-end p-4 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-success animate-pulse"></div>
-                  <span className="text-white text-xs font-medium">Preview</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Device status badges */}
-            <div className="flex flex-wrap gap-2 justify-center">
-              <div className={`badge badge-lg gap-2 ${videoAvailable ? 'badge-success' : 'badge-error'} badge-outline`}>
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Camera {videoAvailable ? 'Ready' : 'Unavailable'}
-              </div>
-              <div className={`badge badge-lg gap-2 ${audioAvailable ? 'badge-success' : 'badge-error'} badge-outline`}>
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
-                Microphone {audioAvailable ? 'Ready' : 'Unavailable'}
-              </div>
-            </div>
-
-            {/* Join button */}
-            <button
-              onClick={handleJoin}
-              className="btn btn-primary btn-lg w-full rounded-xl"
-            >
-              <svg className="w-5 h-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-              Join Meeting
+            <button onClick={() => navigate('/')} className="btn btn-primary w-full">
+              Go Home
             </button>
-
-            <p className="text-center text-base-content/40 text-xs">
-              Only members of this conversation can join
-            </p>
           </div>
         </div>
       </div>
     )
   }
 
-  // ─── RENDER: In Meeting ───────────────────────────────────────────────────
-  const participantCount = videos.length + 1   // remote peers + me
+  // ── Meeting room ──────────────────────────────────────────────────────────
+  const participantCount = videos.length + 1
+  const hasRemote = videos.length > 0
+
+  const gridCls = hasRemote
+    ? videos.length === 1
+      ? 'grid grid-cols-2 gap-3 w-full h-full'
+      : 'grid grid-cols-2 md:grid-cols-3 gap-3 w-full h-full'
+    : 'flex items-center justify-center w-full h-full gap-3'
 
   return (
-    <div className="min-h-screen bg-neutral flex flex-col">
+    <div className="min-h-screen bg-neutral flex flex-col" data-theme="dark">
 
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-6 py-3 bg-neutral-focus border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-success animate-pulse"></div>
-          <span className="text-neutral-content font-semibold text-sm">Live Meeting</span>
+      <div className="flex items-center justify-between px-5 py-3 bg-neutral-focus/70 border-b border-white/5 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <span className="badge badge-sm gap-1.5 bg-success/15 text-success border-success/20 py-2.5 px-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+            Live
+          </span>
         </div>
-        <div className="badge badge-neutral badge-outline text-neutral-content/60 text-xs">
+
+        <div className="flex items-center gap-1.5 text-neutral-content/50 text-xs">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+          </svg>
           {participantCount} participant{participantCount !== 1 ? 's' : ''}
         </div>
-        {/* Timer placeholder */}
+
         <MeetingTimer />
       </div>
 
       {/* ── Video grid ── */}
-      <div className="flex-1 p-4 overflow-auto">
-        {videos.length === 0 ? (
-          /* Solo — my video large */
-          <div className="flex items-center justify-center h-full">
-            <div className="relative w-full max-w-3xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/10">
-              <video ref={localVideoref} autoPlay muted className="w-full h-full object-cover" />
-              <div className="absolute bottom-3 left-3">
-                <span className="badge badge-neutral badge-sm gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success"></div>
-                  You
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Multi-participant grid */
-          <div className={`grid gap-3 h-full ${videos.length === 1 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3'}`}>
-            {/* My video tile */}
-            <div className="relative rounded-2xl overflow-hidden bg-base-300 border border-white/10 shadow-lg aspect-video">
-              <video ref={localVideoref} autoPlay muted className="w-full h-full object-cover" />
-              <div className="absolute bottom-2 left-2">
-                <span className="badge badge-sm gap-1 bg-black/50 text-white border-0">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success"></div>
-                  You
-                </span>
-              </div>
-              {!video && (
-                <div className="absolute inset-0 bg-neutral flex items-center justify-center">
-                  <div className="avatar placeholder">
-                    <div className="bg-neutral-focus text-neutral-content rounded-full w-16">
-                      <span className="text-xl">{authUser?.fullName?.[0] ?? 'Y'}</span>
-                    </div>
+      <div className="flex-1 p-3 overflow-hidden">
+        <div className={gridCls}>
+
+          {/* ── My tile ── */}
+          <div className={`relative rounded-2xl overflow-hidden bg-neutral-focus ring-1 ring-white/8 ${!hasRemote ? 'w-full max-w-4xl aspect-video' : 'aspect-video'}`}>
+            <video
+              ref={localVideoref}
+              autoPlay
+              muted
+              playsInline
+              className={`w-full h-full object-cover transition-opacity ${video === false ? 'opacity-0' : 'opacity-100'}`}
+            />
+
+            {/* Avatar fallback when cam off */}
+            {video === false && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="avatar placeholder">
+                  <div className="w-20 rounded-full bg-primary/20 text-primary text-2xl font-bold">
+                    <span>{authUser?.fullName?.[0]?.toUpperCase() ?? 'Y'}</span>
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* Remote video tiles */}
-            {videos.map(v => (
-              <div key={v.socketId} className="relative rounded-2xl overflow-hidden bg-base-300 border border-white/10 shadow-lg aspect-video">
-                <video
-                  autoPlay
-                  className="w-full h-full object-cover"
-                  ref={ref => { if (ref && v.stream) ref.srcObject = v.stream }}
-                />
-                <div className="absolute bottom-2 left-2">
-                  <span className="badge badge-sm gap-1 bg-black/50 text-white border-0">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>
-                    Participant
-                  </span>
-                </div>
               </div>
-            ))}
+            )}
+
+            {/* Label + status badges */}
+            <div className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/75 to-transparent flex items-center justify-between">
+              <span className="text-white/90 text-xs font-medium flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                {authUser?.fullName ?? 'You'} <span className="text-white/40">(you)</span>
+              </span>
+              <div className="flex items-center gap-1">
+                {!audio && (
+                  <span className="badge badge-xs bg-error/80 border-0 text-white py-2 px-1.5">
+                    <MicOffIcon style={{ fontSize: 11 }} />
+                  </span>
+                )}
+                {!video && (
+                  <span className="badge badge-xs bg-base-content/20 border-0 text-white py-2 px-1.5">
+                    <VideocamOffIcon style={{ fontSize: 11 }} />
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* ── Remote tiles ── */}
+          {videos.map((v, i) => (
+            <div key={v.socketId} className="relative rounded-2xl overflow-hidden bg-neutral-focus ring-1 ring-white/8 aspect-video">
+              <video
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+                ref={ref => { if (ref && v.stream) ref.srcObject = v.stream }}
+              />
+              <div className="absolute bottom-0 left-0 right-0 px-3 py-2.5 bg-gradient-to-t from-black/75 to-transparent">
+                <span className="text-white/90 text-xs font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  Participant {i + 1}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {/* ── Waiting placeholder (only when alone, desktop) ── */}
+          {!hasRemote && (
+            <div className="hidden md:flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 w-full max-w-4xl aspect-video gap-3 select-none">
+              <svg className="w-9 h-9 text-neutral-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
+                  d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+              </svg>
+              <p className="text-neutral-content/25 text-sm">Waiting for others to join…</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Control bar ── */}
-      <div className="pb-6 pt-3 px-4 flex items-center justify-center gap-3">
-        {/* Mic */}
-        <button
-          onClick={handleAudio}
-          className={`btn btn-circle btn-lg ${audio ? 'btn-ghost bg-white/10 text-white hover:bg-white/20' : 'btn-error'}`}
-          title={audio ? 'Mute' : 'Unmute'}
-        >
-          {audio ? <MicIcon /> : <MicOffIcon />}
-        </button>
+      <div className="py-5 px-4 flex justify-center">
+        <div className="inline-flex items-center gap-2 bg-neutral-focus/60 border border-white/8 rounded-2xl px-5 py-3 backdrop-blur-sm shadow-xl">
 
-        {/* End call — centrepiece */}
-        <button
-          onClick={handleEndCall}
-          className="btn btn-circle btn-lg btn-error shadow-lg shadow-error/30 scale-110"
-          title="Leave meeting"
-        >
-          <CallEndIcon />
-        </button>
+          {/* Mic */}
+          <div className="tooltip tooltip-top" data-tip={audio ? 'Mute' : 'Unmute'}>
+            <button
+              onClick={handleAudio}
+              className={`btn btn-circle ${audio
+                ? 'bg-white/10 border-white/10 text-white hover:bg-white/20'
+                : 'btn-error'}`}
+            >
+              {audio ? <MicIcon /> : <MicOffIcon />}
+            </button>
+          </div>
 
-        {/* Camera */}
-        <button
-          onClick={handleVideo}
-          className={`btn btn-circle btn-lg ${video ? 'btn-ghost bg-white/10 text-white hover:bg-white/20' : 'btn-error'}`}
-          title={video ? 'Turn off camera' : 'Turn on camera'}
-        >
-          {video ? <VideocamIcon /> : <VideocamOffIcon />}
-        </button>
+          {/* Camera */}
+          <div className="tooltip tooltip-top" data-tip={video ? 'Camera off' : 'Camera on'}>
+            <button
+              onClick={handleVideo}
+              className={`btn btn-circle ${video
+                ? 'bg-white/10 border-white/10 text-white hover:bg-white/20'
+                : 'btn-error'}`}
+            >
+              {video ? <VideocamIcon /> : <VideocamOffIcon />}
+            </button>
+          </div>
 
-        {/* Screen share (only if available) */}
-        {screenAvailable && (
-          <button
-            onClick={handleScreen}
-            className={`btn btn-circle btn-lg ${screen ? 'btn-primary' : 'btn-ghost bg-white/10 text-white hover:bg-white/20'}`}
-            title={screen ? 'Stop sharing' : 'Share screen'}
-          >
-            {screen ? <ScreenShareIcon /> : <StopScreenShareIcon />}
-          </button>
-        )}
+          <div className="w-px h-7 bg-white/10 mx-1" />
+
+          {/* End call */}
+          <div className="tooltip tooltip-top" data-tip="Leave meeting">
+            <button
+              onClick={handleEndCall}
+              className="btn btn-circle btn-lg btn-error shadow-lg shadow-error/30"
+            >
+              <CallEndIcon />
+            </button>
+          </div>
+
+          {screenAvailable && (
+            <>
+              <div className="w-px h-7 bg-white/10 mx-1" />
+              <div className="tooltip tooltip-top" data-tip={screen ? 'Stop sharing' : 'Share screen'}>
+                <button
+                  onClick={handleScreen}
+                  className={`btn btn-circle ${screen
+                    ? 'btn-primary'
+                    : 'bg-white/10 border-white/10 text-white hover:bg-white/20'}`}
+                >
+                  {screen ? <ScreenShareIcon /> : <StopScreenShareIcon />}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  )
-}
 
-// ─── Small timer sub-component ────────────────────────────────────────────────
-const MeetingTimer = () => {
-  const [seconds, setSeconds] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setSeconds(s => s + 1), 1000)
-    return () => clearInterval(t)
-  }, [])
-  const hh = String(Math.floor(seconds / 3600)).padStart(2, '0')
-  const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')
-  const ss = String(seconds % 60).padStart(2, '0')
-  return (
-    <span className="text-neutral-content/50 text-xs font-mono tabular-nums">
-      {hh}:{mm}:{ss}
-    </span>
+    </div>
   )
 }
 
