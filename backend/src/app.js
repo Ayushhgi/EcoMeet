@@ -10,7 +10,7 @@ import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
 import messageRoutes from './routes/message.route.js'
-
+import path from "path";
 
 const app = express();
 const server = createServer(app); 
@@ -42,6 +42,12 @@ app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/conversation-room',conversationRoutes);
 app.use("/api/message", messageRoutes);
+
+app.use(express.static(path.join(path.resolve(), "frontend", "dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(path.resolve(), "frontend", "dist", "index.html"));
+});
 
 
 app.set("port", (process.env.PORT || 9002));
