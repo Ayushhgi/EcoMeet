@@ -11,14 +11,24 @@ import authRoutes from './routes/auth.route.js';
 import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
 import messageRoutes from './routes/message.route.js'
-import path from 'path';
+import { Server } from "socket.io";
 
 
 
 const app = express();
 const server = createServer(app); 
-connectToSocket(server);
-connectToVideoMeetSocket(server);
+
+
+const io = new Server(server,{
+    cors:{
+        origin:"https://ecomeet-ed87.onrender.com",
+        methods:["GET","POST"],
+        credentials:true
+    }
+});
+
+connectToSocket(io);
+connectToVideoMeetSocket(io);
 
 dotenv.config({ path: "./.env" });
 

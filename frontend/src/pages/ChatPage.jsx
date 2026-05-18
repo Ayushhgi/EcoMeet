@@ -55,7 +55,7 @@ const ChatPage = () => {
     if (!conversation?._id) return
 
     if (!socketRef.current) {
-      socketRef.current = io('https://backendecomeet.onrender.com', {
+      socketRef.current = io('https://backendecomeet.onrender.com/chat', {
         withCredentials: true
       })
     }

@@ -4,16 +4,8 @@ let connections = {}
 let timeOnline = {}
 let messages = {}
 
-export const connectToVideoMeetSocket = server => {
-  const io = new Server(server, {
-    cors: {
-      origin: 'https://ecomeet-ed87.onrender.com', // All client domain
-      methods: ['GET', 'POST'],
-      credentials: true
-    }
-  })
-
-  io.on('connection', socket => {
+export const connectToVideoMeetSocket = io => {
+  io.of('/video').on('connection', socket => {
     console.log('someone is connected in VideoMeetComponent')
     // console.log(window.location.href);
     // console.log(window.location.href);
@@ -50,7 +42,8 @@ export const connectToVideoMeetSocket = server => {
       }
     })
 
-    socket.on('signal', (toId, message) => {       // Server acts as a postman for WebRTC negotiation
+    socket.on('signal', (toId, message) => {
+      // Server acts as a postman for WebRTC negotiation
       io.to(toId).emit('signal', socket.id, message)
     })
 

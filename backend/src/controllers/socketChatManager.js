@@ -1,15 +1,15 @@
 import { Server } from 'socket.io'
 
-export const connectToSocket = server => {
-  const io = new Server(server, {
-    cors: {
-      origin: 'https://ecomeet-ed87.onrender.com',
-      methods: ['GET', 'POST'],
-      credentials: true
-    }
-  })
+export const connectToSocket = io => {
+  // const io = new Server(server, {
+  //   cors: {
+  //     origin: 'https://ecomeet-ed87.onrender.com',
+  //     methods: ['GET', 'POST'],
+  //     credentials: true
+  //   }
+  // })
 
-  io.on('connection', socket => {
+  io.of('/chat').on('connection', socket => {
     console.log('✅ Someone connected:', socket.id)
 
     socket.on('join-room', roomId => {
