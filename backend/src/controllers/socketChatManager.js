@@ -19,7 +19,7 @@ export const connectToSocket = io => {
 
       console.log(
         `👥 Room ${roomId} members:`,
-        io.sockets.adapter.rooms.get(roomId)
+        io.of('/chat').sockets.adapter.rooms.get(roomId)
       )
     })
 
@@ -28,10 +28,10 @@ export const connectToSocket = io => {
 
       console.log(
         `👥 Room ${roomId} members:`,
-        io.sockets.adapter.rooms.get(roomId)
+        io.of('/chat').sockets.adapter.rooms.get(roomId)
       )
 
-      io.to(roomId).emit('receive-message', {
+      io.of('/chat').to(roomId).emit('receive-message', {
         senderId: id,
         text,
         createdAt: new Date().toISOString()

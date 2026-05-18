@@ -21,7 +21,7 @@ export const connectToVideoMeetSocket = io => {
 
       // Broadcast 'user-joined' to all users in the room
       for (let a = 0; a < connections[path].length; a++) {
-        io.to(connections[path][a]).emit(
+        io.of("/video").to(connections[path][a]).emit(
           'user-joined',
           socket.id,
           connections[path]
@@ -44,7 +44,7 @@ export const connectToVideoMeetSocket = io => {
 
     socket.on('signal', (toId, message) => {
       // Server acts as a postman for WebRTC negotiation
-      io.to(toId).emit('signal', socket.id, message)
+      io.of("/video").to(toId).emit('signal', socket.id, message)
     })
 
     socket.on('chat-message', (data, sender) => {
@@ -71,7 +71,7 @@ export const connectToVideoMeetSocket = io => {
         console.log('message', matchingRoom, ':', sender, data)
 
         connections[matchingRoom].forEach(element => {
-          io.to(element).emit('chat-message', data, sender, socket.id)
+          io.of("/video").to(element).emit('chat-message', data, sender, socket.id)
         })
       }
     })
@@ -88,7 +88,7 @@ export const connectToVideoMeetSocket = io => {
 
             // Notify users in the room that a user left
             for (let a = 0; a < connections[key].length; a++) {
-              io.to(connections[key][a]).emit('user-left', socket.id)
+              io.of("/video").to(connections[key][a]).emit('user-left', socket.id)
             }
 
             // Remove the user from the room
