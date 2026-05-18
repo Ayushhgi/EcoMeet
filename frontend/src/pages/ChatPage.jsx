@@ -53,7 +53,7 @@ const ChatPage = () => {
   useEffect(() => {
     socketRef.current = io('https://backendecomeet.onrender.com/chat', {
       withCredentials: true,
-      transports: ['websocket', 'polling']
+      transports: ['polling','websocket']
     })
 
     return () => {

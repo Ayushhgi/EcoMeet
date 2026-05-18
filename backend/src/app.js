@@ -18,6 +18,12 @@ import { Server } from "socket.io";
 const app = express();
 const server = createServer(app); 
 
+app.use(
+  cors({
+    origin: 'https://ecomeet-ed87.onrender.com',
+    credentials: true, //allow frontend to send the cookie
+  })
+);
 
 const io = new Server(server,{
     cors:{
@@ -38,12 +44,7 @@ app.get('/home', (req, res) => {
   return res.json({ hello: 'world' });
 });
 
-app.use(
-  cors({
-    origin: 'https://ecomeet-ed87.onrender.com',
-    credentials: true, //allow frontend to send the cookie
-  })
-);
+
 
 
 app.use(cookieParser());

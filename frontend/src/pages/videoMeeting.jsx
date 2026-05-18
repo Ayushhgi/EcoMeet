@@ -335,7 +335,7 @@ const VideoMeeting = () => {
   const connectToSocketServer = () => {
     socketRef.current = io('https://backendecomeet.onrender.com/video', {
       withCredentials: true,
-      transports: ['websocket', 'polling']
+      transports: ['polling','websocket']
     })
     socketRef.current.on('signal', gotMessageFromServer)
 
