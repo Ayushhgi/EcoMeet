@@ -1,38 +1,50 @@
 import { Server } from 'socket.io'
 
+// ⚠️ These are module-level — reset on server restart
 let connections = {}
 let timeOnline = {}
 let messages = {}
 
 export const connectToVideoMeetSocket = io => {
   io.of('/video').on('connection', socket => {
-    console.log('someone is connected in VideoMeetComponent')
-    // console.log(window.location.href);
-    // console.log(window.location.href);
-    socket.on('join-call', path => {
-      // If the room doesn't exist, create it
+    console.log('✅ Someone connected to /video:', socket.id)
 
+    // ── join-call ────────────────────────────────────────────────────────────
+    socket.on('join-call', path => {
+      console.log(`🚪 join-call received from: ${socket.id}, room: ${path}`)
+
+      // Create room if it doesn't exist
       if (!connections[path]) {
         connections[path] = []
       }
-      connections[path].push(socket.id)
 
-      timeOnline[socket.id] = new Date() // Use socket.id here
-
-      // Broadcast 'user-joined' to all users in the room
-      for (let a = 0; a < connections[path].length; a++) {
-        io.of("/video").to(connections[path][a]).emit(
-          'user-joined',
-          socket.id,
-          connections[path]
-        )
+      // ✅ Fix duplicate participants — don't add if already in room
+      if (connections[path].includes(socket.id)) {
+        console.log(`⏭️ Socket ${socket.id} already in room ${path}, skipping`)
+        return
       }
-      // io.to(connections[path]).emit('user-joined', socket.id,connections[path])
 
-      // Send old messages to the newly joined user
-      if (messages[path] != undefined) {
+      connections[path].push(socket.id)
+      timeOnline[socket.id] = new Date()
+
+      console.log(`👥 Room ${path} now has ${connections[path].length} participant(s):`, connections[path])
+
+      // Broadcast user-joined to ALL users in the room (including the new one)
+      // Each client receives: who joined + full list of clients
+      for (let a = 0; a < connections[path].length; a++) {
+        io.of('/video').to(connections[path][a]).emit(
+          'user-joined',
+          socket.id,           // who just joined
+          connections[path]    // full client list
+        )
+        console.log(`📢 Sent user-joined to: ${connections[path][a]}`)
+      }
+
+      // Send old chat messages to the newly joined user
+      if (messages[path] !== undefined) {
+        console.log(`💬 Sending ${messages[path].length} old messages to: ${socket.id}`)
         for (let a = 0; a < messages[path].length; a++) {
-          io.of("/video").to(socket.id).emit(
+          io.of('/video').to(socket.id).emit(
             'chat-message',
             messages[path][a]['data'],
             messages[path][a]['sender'],
@@ -42,12 +54,16 @@ export const connectToVideoMeetSocket = io => {
       }
     })
 
+    // ── signal (WebRTC negotiation relay) ────────────────────────────────────
     socket.on('signal', (toId, message) => {
-      // Server acts as a postman for WebRTC negotiation
-      io.of("/video").to(toId).emit('signal', socket.id, message)
+      const signal = JSON.parse(message)
+      console.log(`📡 Relaying signal (${signal.sdp?.type || 'ice'}) from: ${socket.id} to: ${toId}`)
+      io.of('/video').to(toId).emit('signal', socket.id, message)
     })
 
+    // ── chat-message ─────────────────────────────────────────────────────────
     socket.on('chat-message', (data, sender) => {
+      // Find which room this socket belongs to
       const [matchingRoom, found] = Object.entries(connections).reduce(
         ([room, isFound], [roomKey, roomValue]) => {
           if (!isFound && roomValue.includes(socket.id)) {
@@ -58,7 +74,7 @@ export const connectToVideoMeetSocket = io => {
         ['', false]
       )
 
-      if (found === true) {
+      if (found) {
         if (messages[matchingRoom] === undefined) {
           messages[matchingRoom] = []
         }
@@ -68,39 +84,53 @@ export const connectToVideoMeetSocket = io => {
           'socket-id-sender': socket.id
         })
 
-        console.log('message', matchingRoom, ':', sender, data)
+        console.log(`💬 Chat message in room ${matchingRoom} from ${sender}:`, data)
 
         connections[matchingRoom].forEach(element => {
-          io.of("/video").to(element).emit('chat-message', data, sender, socket.id)
+          io.of('/video').to(element).emit('chat-message', data, sender, socket.id)
         })
       }
     })
 
+    // ── disconnect ───────────────────────────────────────────────────────────
     socket.on('disconnect', () => {
-      var diffTime = Math.abs(timeOnline[socket.id] - new Date())
-      var key
-      for (const [k, v] of JSON.parse(
-        JSON.stringify(Object.entries(connections))
-      )) {
-        for (let a = 0; a < v.length; a++) {
-          if (v[a] === socket.id) {
-            key = k
+      console.log(`❌ Socket disconnected: ${socket.id}`)
 
-            // Notify users in the room that a user left
-            for (let a = 0; a < connections[key].length; a++) {
-              io.of("/video").to(connections[key][a]).emit('user-left', socket.id)
-            }
+      const onlineTime = timeOnline[socket.id]
+        ? Math.abs(timeOnline[socket.id] - new Date())
+        : 0
+      console.log(`⏱️ Was online for: ${Math.floor(onlineTime / 1000)}s`)
 
-            // Remove the user from the room
-            var index = connections[key].indexOf(socket.id)
-            connections[key].splice(index, 1)
+      delete timeOnline[socket.id]
 
-            // Delete the room if no users are left
-            if (connections[key].length === 0) {
-              delete connections[key]
-            }
+      // Find and remove from whichever room this socket was in
+      for (const [roomPath, roomClients] of Object.entries(connections)) {
+        const index = roomClients.indexOf(socket.id)
+
+        if (index === -1) continue  // not in this room
+
+        console.log(`🚶 Removing ${socket.id} from room: ${roomPath}`)
+
+        // Notify everyone else in the room
+        roomClients.forEach(clientId => {
+          if (clientId !== socket.id) {
+            io.of('/video').to(clientId).emit('user-left', socket.id)
+            console.log(`📢 Sent user-left to: ${clientId}`)
           }
+        })
+
+        // Remove the disconnected socket
+        connections[roomPath].splice(index, 1)
+        console.log(`👥 Room ${roomPath} now has ${connections[roomPath].length} participant(s)`)
+
+        // Clean up empty room
+        if (connections[roomPath].length === 0) {
+          console.log(`🗑️ Room ${roomPath} is empty, deleting`)
+          delete connections[roomPath]
+          delete messages[roomPath]
         }
+
+        break  // ✅ A socket can only be in one room, stop looking
       }
     })
   })

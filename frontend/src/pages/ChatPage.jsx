@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { getConversation, getMessages, sendMessage } from '../lib/api'
 import useAuthUser from '../hooks/useAuthUser'
+import url, { socketUrl } from '../../environment.js'
 
 const ChatPage = () => {
   const { theme } = useThemeStore()
@@ -51,7 +52,7 @@ const ChatPage = () => {
 
   // ================= SOCKET INIT (once on mount) =================
   useEffect(() => {
-    socketRef.current = io('https://backendecomeet.onrender.com/chat', {
+    socketRef.current = io(`${socketUrl}/chat`, {
       withCredentials: true,
       transports: ['polling','websocket']
     })

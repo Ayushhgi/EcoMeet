@@ -10,8 +10,8 @@ import MicIcon from '@mui/icons-material/Mic'
 import MicOffIcon from '@mui/icons-material/MicOff'
 import ScreenShareIcon from '@mui/icons-material/ScreenShare'
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare'
+import { socketUrl } from '../../environment.js'
 
-// ─── ICE config ───────────────────────────────────────────────────────────────
 const peerConfigConnections = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -19,7 +19,6 @@ const peerConfigConnections = {
   ]
 }
 
-// ─── Silent black-frame helpers (used when cam/mic is off) ───────────────────
 const silence = () => {
   const ctx = new AudioContext()
   const oscillator = ctx.createOscillator()
@@ -28,6 +27,7 @@ const silence = () => {
   ctx.resume()
   return Object.assign(dst.stream.getAudioTracks()[0], { enabled: false })
 }
+
 const black = ({ width = 640, height = 480 } = {}) => {
   const canvas = Object.assign(document.createElement('canvas'), {
     width,
@@ -38,14 +38,13 @@ const black = ({ width = 640, height = 480 } = {}) => {
     enabled: false
   })
 }
+
 const blackSilenceStream = () => new MediaStream([black(), silence()])
 
-// ─── Add all tracks of a stream to a peer connection (replaces deprecated addStream) ─
 const addStreamToPeer = (pc, stream) => {
   stream.getTracks().forEach(track => pc.addTrack(track, stream))
 }
 
-// ─── Replace all senders on a peer connection with new stream tracks ──────────
 const replaceStreamOnPeer = async (pc, newStream) => {
   const senders = pc.getSenders()
   const newTracks = newStream.getTracks()
@@ -57,13 +56,11 @@ const replaceStreamOnPeer = async (pc, newStream) => {
         .catch(e => console.log('replaceTrack error:', e))
     }
   }
-  // If there are no senders yet, fall back to addTrack
   if (senders.length === 0) {
     addStreamToPeer(pc, newStream)
   }
 }
 
-// ─── Meeting Timer ────────────────────────────────────────────────────────────
 const MeetingTimer = () => {
   const [seconds, setSeconds] = useState(0)
   useEffect(() => {
@@ -80,91 +77,218 @@ const MeetingTimer = () => {
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 const VideoMeeting = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const { authUser } = useAuthUser()
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
   const socketRef = useRef()
   const socketIdRef = useRef()
   const localVideoref = useRef()
   const videoRef = useRef([])
-
-  // FIX 1: connections lives in a ref so it resets on unmount / StrictMode double-mount
-  // and is not shared across module-level scope.
   const connectionsRef = useRef({})
-
-  // FIX 2: ICE candidate buffer — holds candidates that arrive before remoteDescription is set
   const iceCandidateBuffer = useRef({})
-
-  // Track whether socket is fully connected and ready for renegotiation
+  const isConnectedRef = useRef(false)
   const socketReady = useRef(false)
+  const negotiatingRef = useRef({})
+  const signalQueueRef = useRef({})
 
-  // ── Media capability flags ────────────────────────────────────────────────
   const [videoAvailable, setVideoAvailable] = useState(true)
   const [audioAvailable, setAudioAvailable] = useState(true)
   const [screenAvailable, setScreenAvailable] = useState(false)
-
-  // ── Media toggle state ────────────────────────────────────────────────────
   const [video, setVideo] = useState()
   const [audio, setAudio] = useState()
   const [screen, setScreen] = useState()
-
-  // ── UI state ──────────────────────────────────────────────────────────────
   const [status, setStatus] = useState('validating')
   const [videos, setVideos] = useState([])
+
+  // ── Safe offer creator with negotiation lock ──────────────────────────────
+  const safeCreateOffer = async (pc, peerId) => {
+    if (pc.signalingState !== 'stable') {
+      console.warn(
+        `⚠️ Skipping offer to ${peerId} — state is ${pc.signalingState}`
+      )
+      return
+    }
+    if (negotiatingRef.current[peerId]) {
+      console.warn(`⚠️ Skipping offer to ${peerId} — already negotiating`)
+      return
+    }
+
+    negotiatingRef.current[peerId] = true
+    console.log(`📤 Creating offer for peer: ${peerId}`)
+
+    try {
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      console.log(`✅ Local description set (offer) for peer: ${peerId}`)
+      socketRef.current.emit(
+        'signal',
+        peerId,
+        JSON.stringify({ sdp: pc.localDescription })
+      )
+      console.log(`📡 Offer sent to peer: ${peerId}`)
+    } catch (e) {
+      console.log('❌ safeCreateOffer error:', e)
+    } finally {
+      negotiatingRef.current[peerId] = false
+    }
+  }
+
+  // ── Process a single signal ───────────────────────────────────────────────
+  const processSignal = async (fromId, signal) => {
+    const connections = connectionsRef.current
+    const pc = connections[fromId]
+    if (!pc) return
+
+    if (signal.sdp) {
+      console.log(
+        `📩 Received SDP (${signal.sdp.type}) from: ${fromId}, current state: ${pc.signalingState}`
+      )
+
+      if (
+        (signal.sdp.type === 'offer' && pc.signalingState !== 'stable') ||
+        (signal.sdp.type === 'answer' &&
+          pc.signalingState !== 'have-local-offer')
+      ) {
+        console.warn(
+          `⚠️ Ignoring ${signal.sdp.type} — wrong state: ${pc.signalingState}`
+        )
+        return
+      }
+
+      if (signal.sdp.type === 'offer' && negotiatingRef.current[fromId]) {
+        console.warn(`⚠️ Ignoring offer from ${fromId} — already negotiating`)
+        return
+      }
+
+      try {
+        if (signal.sdp.type === 'offer') negotiatingRef.current[fromId] = true
+
+        await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
+        console.log(
+          `✅ Remote description set (${signal.sdp.type}) from: ${fromId}`
+        )
+
+        const buffered = iceCandidateBuffer.current[fromId] || []
+        if (buffered.length > 0) {
+          console.log(
+            `🧊 Flushing ${buffered.length} buffered ICE candidates for: ${fromId}`
+          )
+        }
+        for (const candidate of buffered) {
+          await pc
+            .addIceCandidate(new RTCIceCandidate(candidate))
+            .catch(e => console.log('❌ ICE flush error:', e))
+        }
+        iceCandidateBuffer.current[fromId] = []
+
+        if (signal.sdp.type === 'offer') {
+          console.log(`📤 Creating answer for: ${fromId}`)
+          const answer = await pc.createAnswer()
+          await pc.setLocalDescription(answer)
+          console.log(`✅ Local description set (answer) for: ${fromId}`)
+          socketRef.current.emit(
+            'signal',
+            fromId,
+            JSON.stringify({ sdp: pc.localDescription })
+          )
+          console.log(`📡 Answer sent to: ${fromId}`)
+          negotiatingRef.current[fromId] = false
+        }
+      } catch (e) {
+        console.log('❌ processSignal error:', e)
+        negotiatingRef.current[fromId] = false
+      }
+    }
+
+    if (signal.ice) {
+      if (!pc.remoteDescription) {
+        console.log(`🧊 Buffering ICE candidate from: ${fromId}`)
+        iceCandidateBuffer.current[fromId] =
+          iceCandidateBuffer.current[fromId] || []
+        iceCandidateBuffer.current[fromId].push(signal.ice)
+      } else {
+        pc.addIceCandidate(new RTCIceCandidate(signal.ice))
+          .then(() => console.log(`🧊 ICE candidate added from: ${fromId}`))
+          .catch(e => console.log('❌ addIceCandidate error:', e))
+      }
+    }
+  }
+
+  // ── gotMessageFromServer ──────────────────────────────────────────────────
+  const gotMessageFromServer = (fromId, message) => {
+    if (fromId === socketIdRef.current) return
+
+    const signal = JSON.parse(message)
+    const connections = connectionsRef.current
+
+    if (!connections[fromId]) {
+      console.warn(`⚠️ Queuing signal from unknown peer: ${fromId}`)
+      signalQueueRef.current[fromId] = signalQueueRef.current[fromId] || []
+      signalQueueRef.current[fromId].push(message)
+      return
+    }
+
+    processSignal(fromId, signal)
+  }
 
   // ── 1. Validate room → get permissions → connect ──────────────────────────
   useEffect(() => {
     if (!id || !authUser) return
 
-    // Reset peer connections on every mount (StrictMode safety)
     connectionsRef.current = {}
     iceCandidateBuffer.current = {}
+    negotiatingRef.current = {}
+    signalQueueRef.current = {}
     socketReady.current = false
 
     const init = async () => {
       try {
+        console.log('🔍 Validating room access...')
         const conversation = await getConversation(id)
         const memberIds = conversation.members?.map(m => m._id || m)
         const allowed = memberIds?.includes(authUser._id)
         if (!allowed) {
+          console.log('🚫 Unauthorized access attempt')
           setStatus('unauthorized')
           return
         }
-
+        console.log('✅ Room access granted')
         setStatus('ready')
         await getPermissions()
         connectToSocketServer()
-      } catch {
+      } catch (e) {
+        console.log('❌ Room validation error:', e)
         setStatus('error')
       }
     }
 
     init()
 
-    // Cleanup on unmount
     return () => {
+      console.log('🧹 Cleaning up VideoMeeting...')
       try {
         localVideoref.current?.srcObject?.getTracks().forEach(t => t.stop())
       } catch (e) {}
       if (socketRef.current) socketRef.current.disconnect()
       Object.values(connectionsRef.current).forEach(pc => pc.close())
       connectionsRef.current = {}
+      negotiatingRef.current = {}
+      signalQueueRef.current = {}
     }
   }, [id, authUser])
 
-  // ── 2. Get permissions without leaking streams ────────────────────────────
-  // FIX 3: Use enumerateDevices + queryPermissions instead of calling getUserMedia
-  // twice just to probe availability. Only one real getUserMedia call is made.
+  // ── 2. Get media permissions ───────────────────────────────────────────────
   const getPermissions = async () => {
     try {
-      // Check what devices exist first (no stream acquired yet)
+      console.log('🎥 Checking media devices...')
       const devices = await navigator.mediaDevices.enumerateDevices()
       const hasVideo = devices.some(d => d.kind === 'videoinput')
       const hasAudio = devices.some(d => d.kind === 'audioinput')
+      console.log(
+        `📷 Video available: ${hasVideo}, 🎤 Audio available: ${hasAudio}`
+      )
 
       setVideoAvailable(hasVideo)
       setAudioAvailable(hasAudio)
@@ -172,33 +296,31 @@ const VideoMeeting = () => {
 
       if (!hasVideo && !hasAudio) return
 
-      // Single getUserMedia call — no leaked streams
       const stream = await navigator.mediaDevices
-        .getUserMedia({
-          video: hasVideo,
-          audio: hasAudio
-        })
+        .getUserMedia({ video: hasVideo, audio: hasAudio })
         .catch(() => null)
 
-      if (!stream) return
+      if (!stream) {
+        console.log('⚠️ Could not get media stream')
+        return
+      }
 
+      console.log('✅ Local media stream acquired')
       window.localStream = stream
       if (localVideoref.current) localVideoref.current.srcObject = stream
 
-      // Set toggle state AFTER stream is ready so the renegotiation effect
-      // only fires once the socket is also connected (socketReady guard below)
       setVideo(hasVideo)
       setAudio(hasAudio)
     } catch (e) {
-      console.log('getPermissions error:', e)
+      console.log('❌ getPermissions error:', e)
     }
   }
 
   // ── 3. Re-acquire media when toggles change ───────────────────────────────
-  // FIX 4: Guard with socketReady so this doesn't fire before peers exist
   useEffect(() => {
     if (video === undefined || audio === undefined) return
-    if (!socketReady.current) return // don't renegotiate before socket is up
+    if (!socketReady.current) return
+    console.log(`🔄 Media toggle changed — video: ${video}, audio: ${audio}`)
     getUserMedia()
   }, [audio, video])
 
@@ -207,7 +329,7 @@ const VideoMeeting = () => {
       navigator.mediaDevices
         .getUserMedia({ video, audio })
         .then(getUserMediaSuccess)
-        .catch(e => console.log('getUserMedia error:', e))
+        .catch(e => console.log('❌ getUserMedia error:', e))
     } else {
       try {
         localVideoref.current?.srcObject?.getTracks().forEach(t => t.stop())
@@ -215,9 +337,8 @@ const VideoMeeting = () => {
     }
   }
 
-  // ── getUserMediaSuccess ───────────────────────────────────────────────────
   const getUserMediaSuccess = async stream => {
-    // Stop old tracks
+    console.log('✅ New media stream acquired after toggle')
     try {
       window.localStream.getTracks().forEach(t => t.stop())
     } catch (e) {}
@@ -225,30 +346,16 @@ const VideoMeeting = () => {
     localVideoref.current.srcObject = stream
 
     const connections = connectionsRef.current
-
-    // FIX 5: Use replaceTrack instead of addStream (addStream is deprecated/removed)
-    // replaceTrack doesn't require renegotiation for same-kind track swaps,
-    // but we still send a new offer so the remote side gets the updated SDP.
     for (const peerId in connections) {
       if (peerId === socketIdRef.current) continue
+      console.log(`🔁 Replacing stream for peer: ${peerId}`)
       await replaceStreamOnPeer(connections[peerId], stream)
-      connections[peerId].createOffer().then(description => {
-        connections[peerId]
-          .setLocalDescription(description)
-          .then(() => {
-            socketRef.current.emit(
-              'signal',
-              peerId,
-              JSON.stringify({ sdp: connections[peerId].localDescription })
-            )
-          })
-          .catch(e => console.log(e))
-      })
+      await safeCreateOffer(connections[peerId], peerId)
     }
 
-    // When a track ends (e.g. user unplugs camera), fall back to black/silence
     stream.getTracks().forEach(track => {
       track.onended = async () => {
+        console.log('⚠️ Local track ended — switching to black silence')
         setVideo(false)
         setAudio(false)
         try {
@@ -261,111 +368,74 @@ const VideoMeeting = () => {
         for (const peerId in connections) {
           if (peerId === socketIdRef.current) continue
           await replaceStreamOnPeer(connections[peerId], window.localStream)
-          connections[peerId].createOffer().then(desc => {
-            connections[peerId]
-              .setLocalDescription(desc)
-              .then(() => {
-                socketRef.current.emit(
-                  'signal',
-                  peerId,
-                  JSON.stringify({ sdp: connections[peerId].localDescription })
-                )
-              })
-              .catch(e => console.log(e))
-          })
+          await safeCreateOffer(connections[peerId], peerId)
         }
       }
     })
-  }
-
-  // ── gotMessageFromServer ──────────────────────────────────────────────────
-  const gotMessageFromServer = (fromId, message) => {
-    const signal = JSON.parse(message)
-    const connections = connectionsRef.current
-
-    if (fromId === socketIdRef.current) return
-
-    // FIX 6: Guard against signals for unknown peers
-    if (!connections[fromId]) {
-      console.warn('Signal received for unknown peer:', fromId)
-      return
-    }
-
-    if (signal.sdp) {
-      connections[fromId]
-        .setRemoteDescription(new RTCSessionDescription(signal.sdp))
-        .then(async () => {
-          // FIX 7: Flush buffered ICE candidates now that remoteDescription is set
-          const buffered = iceCandidateBuffer.current[fromId] || []
-          for (const candidate of buffered) {
-            await connections[fromId]
-              .addIceCandidate(new RTCIceCandidate(candidate))
-              .catch(e => console.log(e))
-          }
-          iceCandidateBuffer.current[fromId] = []
-
-          if (signal.sdp.type === 'offer') {
-            const description = await connections[fromId].createAnswer()
-            await connections[fromId].setLocalDescription(description)
-            socketRef.current.emit(
-              'signal',
-              fromId,
-              JSON.stringify({ sdp: connections[fromId].localDescription })
-            )
-          }
-        })
-        .catch(e => console.log('setRemoteDescription error:', e))
-    }
-
-    if (signal.ice) {
-      // FIX 8: Buffer ICE candidates if remoteDescription isn't ready yet
-      if (!connections[fromId].remoteDescription) {
-        iceCandidateBuffer.current[fromId] =
-          iceCandidateBuffer.current[fromId] || []
-        iceCandidateBuffer.current[fromId].push(signal.ice)
-      } else {
-        connections[fromId]
-          .addIceCandidate(new RTCIceCandidate(signal.ice))
-          .catch(e => console.log('addIceCandidate error:', e))
-      }
-    }
   }
 
   // ── connectToSocketServer ─────────────────────────────────────────────────
   const connectToSocketServer = () => {
-    socketRef.current = io('https://backendecomeet.onrender.com/video', {
+    console.log('🔌 Connecting to socket server...')
+    if (isConnectedRef.current) {
+      console.log('⏭️ Already connected, skipping duplicate socket init')
+      return
+    }
+    isConnectedRef.current = true
+
+    console.log('🔌 Connecting to socket server...')
+
+    socketRef.current = io(`${socketUrl}/video`, {
       withCredentials: true,
-      transports: ['polling','websocket']
+      transports: ['polling', 'websocket']
     })
+
     socketRef.current.on('signal', gotMessageFromServer)
 
     socketRef.current.on('connect', () => {
+      console.log('✅ Socket connected:', socketRef.current.id)
       socketRef.current.emit('join-call', window.location.href)
       socketIdRef.current = socketRef.current.id
-      socketReady.current = true // socket is up — renegotiation can now fire
+      socketReady.current = true
 
       socketRef.current.on('user-left', leftId => {
-        // Close and clean up the peer connection
+        console.log('👋 User left:', leftId)
         if (connectionsRef.current[leftId]) {
           connectionsRef.current[leftId].close()
           delete connectionsRef.current[leftId]
+          delete iceCandidateBuffer.current[leftId]
+          delete negotiatingRef.current[leftId]
+          delete signalQueueRef.current[leftId]
         }
-        setVideos(vs => vs.filter(v => v.socketId !== leftId))
+        setVideos(vs => {
+          const updated = vs.filter(v => v.socketId !== leftId)
+          videoRef.current = updated
+          return updated
+        })
       })
 
-      socketRef.current.on('user-joined', (id, clients) => {
+      socketRef.current.on('user-joined', async (joinedId, clients) => {
+        console.log(
+          `👤 user-joined event — joinedId: ${joinedId}, all clients:`,
+          clients
+        )
         const connections = connectionsRef.current
 
         clients.forEach(socketListId => {
-          // Don't recreate an already-existing connection
-          if (connections[socketListId]) return
+          if (connections[socketListId]) {
+            console.log(
+              `⏭️ Skipping — connection already exists for: ${socketListId}`
+            )
+            return
+          }
 
+          console.log(`🤝 Creating peer connection for: ${socketListId}`)
           const pc = new RTCPeerConnection(peerConfigConnections)
           connections[socketListId] = pc
 
-          // ICE candidate handler
           pc.onicecandidate = event => {
             if (event.candidate) {
+              console.log(`🧊 Sending ICE candidate to: ${socketListId}`)
               socketRef.current.emit(
                 'signal',
                 socketListId,
@@ -374,15 +444,28 @@ const VideoMeeting = () => {
             }
           }
 
-          // FIX 9: ontrack replaces deprecated onaddstream
+          pc.onconnectionstatechange = () => {
+            console.log(
+              `🔗 Connection state with ${socketListId}: ${pc.connectionState}`
+            )
+          }
+
+          pc.onsignalingstatechange = () => {
+            console.log(
+              `📶 Signaling state with ${socketListId}: ${pc.signalingState}`
+            )
+          }
+
           pc.ontrack = event => {
             const stream = event.streams[0]
             if (!stream) return
+            console.log(`🎞️ Received remote track from: ${socketListId}`)
 
-            const exists = videoRef.current.find(
+            const alreadyExists = videoRef.current.find(
               v => v.socketId === socketListId
             )
-            if (exists) {
+            if (alreadyExists) {
+              console.log(`🔄 Updating existing stream for: ${socketListId}`)
               setVideos(prev => {
                 const updated = prev.map(v =>
                   v.socketId === socketListId ? { ...v, stream } : v
@@ -391,49 +474,58 @@ const VideoMeeting = () => {
                 return updated
               })
             } else {
-              const newVideo = { socketId: socketListId, stream }
+              console.log(`➕ Adding new video tile for: ${socketListId}`)
               setVideos(vs => {
-                const updated = [...vs, newVideo]
+                if (vs.find(v => v.socketId === socketListId)) return vs
+                const updated = [...vs, { socketId: socketListId, stream }]
                 videoRef.current = updated
                 return updated
               })
             }
           }
 
-          // Add local stream to peer — FIX 10: addTrack instead of addStream
           const localStream = window.localStream || blackSilenceStream()
           if (!window.localStream) window.localStream = localStream
           addStreamToPeer(pc, localStream)
+          console.log(`📹 Local stream added to peer: ${socketListId}`)
+
+          // ✅ Flush any queued signals for this peer
+          const queued = signalQueueRef.current[socketListId] || []
+          if (queued.length > 0) {
+            console.log(
+              `📬 Flushing ${queued.length} queued signals for: ${socketListId}`
+            )
+            queued.forEach(msg => processSignal(socketListId, JSON.parse(msg)))
+            signalQueueRef.current[socketListId] = []
+          }
         })
 
-        // Only the newly-joined user creates offers to everyone else
-        if (id === socketIdRef.current) {
+        // Only the newly joined user creates offers to everyone else
+        if (joinedId === socketIdRef.current) {
+          console.log(
+            '🆕 I am the new joiner — creating offers to all existing peers'
+          )
           for (const id2 in connections) {
             if (id2 === socketIdRef.current) continue
-            connections[id2].createOffer().then(offer => {
-              connections[id2]
-                .setLocalDescription(offer)
-                .then(() => {
-                  socketRef.current.emit(
-                    'signal',
-                    id2,
-                    JSON.stringify({ sdp: connections[id2].localDescription })
-                  )
-                })
-                .catch(e => console.log(e))
-            })
+            await safeCreateOffer(connections[id2], id2)
           }
         }
       })
+    })
+
+    socketRef.current.on('disconnect', () => {
+      console.log('❌ Socket disconnected')
+    })
+
+    socketRef.current.on('connect_error', err => {
+      console.log('❌ Socket connection error:', err.message)
     })
   }
 
   // ── Screen share ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (screen === undefined) return
-    if (screen) {
-      getDisplayMedia()
-    }
+    if (screen) getDisplayMedia()
   }, [screen])
 
   const getDisplayMedia = () => {
@@ -441,10 +533,11 @@ const VideoMeeting = () => {
     navigator.mediaDevices
       .getDisplayMedia({ video: true, audio: true })
       .then(getDisplayMediaSuccess)
-      .catch(e => console.log('getDisplayMedia error:', e))
+      .catch(e => console.log('❌ getDisplayMedia error:', e))
   }
 
   const getDisplayMediaSuccess = async stream => {
+    console.log('🖥️ Screen share stream acquired')
     try {
       window.localStream.getTracks().forEach(t => t.stop())
     } catch (e) {}
@@ -455,22 +548,12 @@ const VideoMeeting = () => {
     for (const peerId in connections) {
       if (peerId === socketIdRef.current) continue
       await replaceStreamOnPeer(connections[peerId], stream)
-      connections[peerId].createOffer().then(desc => {
-        connections[peerId]
-          .setLocalDescription(desc)
-          .then(() => {
-            socketRef.current.emit(
-              'signal',
-              peerId,
-              JSON.stringify({ sdp: connections[peerId].localDescription })
-            )
-          })
-          .catch(e => console.log(e))
-      })
+      await safeCreateOffer(connections[peerId], peerId)
     }
 
     stream.getTracks().forEach(track => {
       track.onended = () => {
+        console.log('🖥️ Screen share ended')
         setScreen(false)
         try {
           localVideoref.current.srcObject.getTracks().forEach(t => t.stop())
@@ -484,6 +567,7 @@ const VideoMeeting = () => {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleEndCall = () => {
+    console.log('📴 Ending call...')
     try {
       localVideoref.current.srcObject.getTracks().forEach(t => t.stop())
     } catch (e) {}
@@ -597,10 +681,8 @@ const VideoMeeting = () => {
     )
   }
 
-  // ── Meeting room ──────────────────────────────────────────────────────────
   const participantCount = videos.length + 1
   const hasRemote = videos.length > 0
-
   const gridCls = hasRemote
     ? videos.length === 1
       ? 'grid grid-cols-2 gap-3 w-full h-full'

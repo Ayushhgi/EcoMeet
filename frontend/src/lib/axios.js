@@ -2,6 +2,7 @@ import axios from "axios";
 import server from "../../environment";
 
 const BASE_URL = server ;
+console.log(BASE_URL)
 
 export const axiosInstance = axios.create({
   baseURL: BASE_URL,

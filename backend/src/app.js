@@ -12,7 +12,9 @@ import userRoutes from './routes/user.route.js';
 import conversationRoutes from './routes/conversational.route.js'
 import messageRoutes from './routes/message.route.js'
 import { Server } from "socket.io";
+dotenv.config({ path: "./.env" });
 
+const url=process.env.ENVIRONMENT==="development"?'http://localhost:5173':'https://ecomeet-ed87.onrender.com';
 
 
 const app = express();
@@ -20,14 +22,14 @@ const server = createServer(app);
 
 app.use(
   cors({
-    origin: 'https://ecomeet-ed87.onrender.com',
+    origin: url,
     credentials: true, //allow frontend to send the cookie
   })
 );
 
 const io = new Server(server,{
     cors:{
-        origin:"https://ecomeet-ed87.onrender.com",
+        origin:url,
         methods:["GET","POST"],
         credentials:true
     }
@@ -36,7 +38,6 @@ const io = new Server(server,{
 connectToSocket(io);
 connectToVideoMeetSocket(io);
 
-dotenv.config({ path: "./.env" });
 
 const dbUrl =process.env.MONGODB_URL;
 

@@ -17,19 +17,12 @@ export const connectToSocket = io => {
 
       console.log(`🚪 Socket ${socket.id} joined room ${roomId}`)
 
-      console.log(
-        `👥 Room ${roomId} members:`,
-        io.of('/chat').sockets.adapter.rooms.get(roomId)
-      )
     })
 
     socket.on('send-message', ({ roomId, id, text }) => {
       console.log(`📨 Message from ${id} in room ${roomId}:`, text)
 
-      console.log(
-        `👥 Room ${roomId} members:`,
-        io.of('/chat').sockets.adapter.rooms.get(roomId)
-      )
+      
 
       io.of('/chat').to(roomId).emit('receive-message', {
         senderId: id,
