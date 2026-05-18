@@ -18,7 +18,7 @@ import path from 'path';
 const app = express();
 const server = createServer(app); 
 connectToSocket(server);
-// connectToVideoMeetSocket(server);
+connectToVideoMeetSocket(server);
 
 dotenv.config({ path: "./.env" });
 
