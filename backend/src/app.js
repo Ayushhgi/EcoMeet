@@ -24,7 +24,8 @@ const io = new Server(server,{
         origin:"https://ecomeet-ed87.onrender.com",
         methods:["GET","POST"],
         credentials:true
-    }
+    },
+    transports:["websocket"]
 });
 
 connectToSocket(io);

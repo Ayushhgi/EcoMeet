@@ -32,7 +32,7 @@ export const connectToVideoMeetSocket = io => {
       // Send old messages to the newly joined user
       if (messages[path] != undefined) {
         for (let a = 0; a < messages[path].length; a++) {
-          io.to(socket.id).emit(
+          io.of("/video").to(socket.id).emit(
             'chat-message',
             messages[path][a]['data'],
             messages[path][a]['sender'],
