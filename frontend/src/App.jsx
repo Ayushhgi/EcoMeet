@@ -16,7 +16,7 @@ import MyFriends from './pages/MyFriends.jsx'
 import ChatPage from './pages/ChatPage.jsx'
 import VideoMeeting from './pages/videoMeeting.jsx'
 import RequestsPage from './pages/RequestsPage.jsx'
-import SentRequestsPage from './pages/SentRequestsPage.jsx'
+import SentRequestsPage from './pages/sentRequestsPage.jsx'
 
 import Navbar from './components/Navbar.jsx'
 import PageLoader from './components/PageLoader.jsx'
