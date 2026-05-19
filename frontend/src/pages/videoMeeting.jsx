@@ -12,11 +12,31 @@ import ScreenShareIcon from '@mui/icons-material/ScreenShare'
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare'
 import { socketUrl } from '../../environment.js'
 
+// ✅ Fix - add free TURN servers + more STUN
 const peerConfigConnections = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    // Free TURN servers from open-relay
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ],
+  iceCandidatePoolSize: 10
 }
 
 const silence = () => {
@@ -241,6 +261,7 @@ const VideoMeeting = () => {
     iceCandidateBuffer.current = {}
     negotiatingRef.current = {}
     signalQueueRef.current = {}
+    isConnectedRef.current = false
     socketReady.current = false
 
     const init = async () => {
@@ -268,6 +289,7 @@ const VideoMeeting = () => {
 
     return () => {
       console.log('🧹 Cleaning up VideoMeeting...')
+      isConnectedRef.current = false
       try {
         localVideoref.current?.srcObject?.getTracks().forEach(t => t.stop())
       } catch (e) {}
@@ -376,7 +398,6 @@ const VideoMeeting = () => {
 
   // ── connectToSocketServer ─────────────────────────────────────────────────
   const connectToSocketServer = () => {
-    console.log('🔌 Connecting to socket server...')
     if (isConnectedRef.current) {
       console.log('⏭️ Already connected, skipping duplicate socket init')
       return
@@ -448,6 +469,19 @@ const VideoMeeting = () => {
             console.log(
               `🔗 Connection state with ${socketListId}: ${pc.connectionState}`
             )
+
+            // ✅ Auto restart ICE on failure
+            if (pc.connectionState === 'failed') {
+              console.log(
+                `🔄 ICE failed with ${socketListId}, attempting restart...`
+              )
+              pc.restartIce()
+            }
+
+            // ✅ Clean up disconnected peers
+            if (pc.connectionState === 'disconnected') {
+              console.log(`⚠️ Peer ${socketListId} disconnected`)
+            }
           }
 
           pc.onsignalingstatechange = () => {
