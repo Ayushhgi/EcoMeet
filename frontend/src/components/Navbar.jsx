@@ -4,10 +4,12 @@ import ThemeSelector from './ThemeSelector'
 import { useThemeStore } from '../store/useThemeStore'
 import { Link } from 'react-router-dom'
 import { ShipWheelIcon } from 'lucide-react'
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from 'react-router-dom'
 import useAuthUser from '../hooks/useAuthUser'
+import ProfileCard from '../components/ProfileCard'
 
 const Navbar = ({ showSidebarAndNavbar = true, children }) => {
+  const [showProfileCard, setShowProfileCard] = useState(false)
   const { theme } = useThemeStore()
   // const queryClient = useQueryClient();
   // const { mutate: logoutMutation } = useMutation({
@@ -15,9 +17,8 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
   //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ["authUser"] }),
   // });
   const { logoutMutation } = useLogout()
-  const navigate = useNavigate();
-  const { isLoading, authUser } = useAuthUser();
-  
+  const navigate = useNavigate()
+  const { isLoading, authUser } = useAuthUser()
 
   return (
     <div data-theme={theme} className='drawer lg:drawer-open'>
@@ -103,10 +104,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                   className='btn btn-ghost btn-circle avatar'
                 >
                   <div className='w-10 rounded-full'>
-                    <img
-                      alt='profile'
-                      src={authUser?.profilePic}
-                    />
+                    <img alt='profile' src={authUser?.profilePic} />
                   </div>
                 </div>
 
@@ -115,10 +113,12 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                   className='menu menu-sm dropdown-content bg-base-100 rounded-box z-10 mt-3 w-52 p-2 shadow'
                 >
                   <li>
-                    <a className='justify-between'>
+                    <button
+                      onClick={() => setShowProfileCard(true)}
+                      className='justify-between'
+                    >
                       Profile
-                      <span className='badge'>New</span>
-                    </a>
+                    </button>
                   </li>
 
                   <li>
@@ -130,6 +130,27 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
                   </li>
                 </ul>
               </div>
+              {showProfileCard && (
+                <dialog className='modal modal-open'>
+                  <div className='modal-box max-w-lg'>
+                    <ProfileCard />
+
+                    <div className='modal-action'>
+                      <button
+                        className='btn'
+                        onClick={() => setShowProfileCard(false)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className='modal-backdrop'
+                    onClick={() => setShowProfileCard(false)}
+                  />
+                </dialog>
+              )}
               <button
                 onClick={logoutMutation}
                 className='btn btn-ghost btn-circle'
@@ -176,7 +197,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
               <button
                 className='is-drawer-close:tooltip is-drawer-close:tooltip-right'
                 data-tip='Homepage'
-                onClick={() => navigate("/")}
+                onClick={() => navigate('/')}
               >
                 <svg
                   xmlns='http://www.w3.org/2000/svg'
@@ -201,7 +222,9 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
               <button
                 className='is-drawer-close:tooltip is-drawer-close:tooltip-right'
                 data-tip='Friends'
-                onClick={()=>{navigate('/myfriends')}}
+                onClick={() => {
+                  navigate('/myfriends')
+                }}
               >
                 <svg
                   xmlns='http://www.w3.org/2000/svg'
@@ -225,7 +248,7 @@ const Navbar = ({ showSidebarAndNavbar = true, children }) => {
               <button
                 className='is-drawer-close:tooltip is-drawer-close:tooltip-right'
                 data-tip='Notification'
-                 onClick={() => navigate("/notification")}
+                onClick={() => navigate('/notification')}
               >
                 <svg
                   xmlns='http://www.w3.org/2000/svg'
